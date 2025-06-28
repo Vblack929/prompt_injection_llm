@@ -1,0 +1,16 @@
+{"time":"2025-06-27T19:58:47.393359+01:00","level":"INFO","msg":"using version","core version":"0.18.5"}
+{"time":"2025-06-27T19:58:47.39339+01:00","level":"INFO","msg":"created symlink","path":"/Users/vblack/Desktop/backdoor_llm/dpo/wandb/run-20250627_195847-zhsx5isg/logs/debug-core.log"}
+{"time":"2025-06-27T19:58:47.506284+01:00","level":"INFO","msg":"created new stream","id":"zhsx5isg"}
+{"time":"2025-06-27T19:58:47.506352+01:00","level":"INFO","msg":"stream: started","id":"zhsx5isg"}
+{"time":"2025-06-27T19:58:47.506491+01:00","level":"INFO","msg":"sender: started","stream_id":"zhsx5isg"}
+{"time":"2025-06-27T19:58:47.506624+01:00","level":"INFO","msg":"handler: started","stream_id":{"value":"zhsx5isg"}}
+{"time":"2025-06-27T19:58:47.506395+01:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"zhsx5isg"}}
+{"time":"2025-06-27T19:58:47.806592+01:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-06-27T20:22:50.956403+01:00","level":"INFO","msg":"stream: closing","id":"zhsx5isg"}
+{"time":"2025-06-27T20:22:50.957293+01:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-06-27T20:22:50.960275+01:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-06-27T20:22:53.214264+01:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-06-27T20:22:53.611596+01:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"zhsx5isg"}}
+{"time":"2025-06-27T20:22:53.611691+01:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"zhsx5isg"}}
+{"time":"2025-06-27T20:22:53.611777+01:00","level":"INFO","msg":"sender: closed","stream_id":"zhsx5isg"}
+{"time":"2025-06-27T20:22:53.612163+01:00","level":"INFO","msg":"stream: closed","id":"zhsx5isg"}

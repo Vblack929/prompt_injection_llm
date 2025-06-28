@@ -1,0 +1,20 @@
+  0%|                                                                                                              | 0/250 [00:00<?, ?it/s]Traceback (most recent call last):
+  File "/Users/vblack/Desktop/backdoor_llm/dpo/dpo_training.py", line 134, in <module>
+    main()
+  File "/Users/vblack/Desktop/backdoor_llm/dpo/dpo_training.py", line 127, in main
+    trainer.train()
+  File "/Users/vblack/opt/miniconda3/envs/qwen/lib/python3.10/site-packages/transformers/trainer.py", line 2245, in train
+    return inner_training_loop(
+  File "/Users/vblack/opt/miniconda3/envs/qwen/lib/python3.10/site-packages/transformers/trainer.py", line 2514, in _inner_training_loop
+    batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches, args.device)
+TypeError: DPOTrainer.get_batch_samples() takes 3 positional arguments but 4 were given
+Traceback (most recent call last):
+  File "/Users/vblack/Desktop/backdoor_llm/dpo/dpo_training.py", line 134, in <module>
+    main()
+  File "/Users/vblack/Desktop/backdoor_llm/dpo/dpo_training.py", line 127, in main
+    trainer.train()
+  File "/Users/vblack/opt/miniconda3/envs/qwen/lib/python3.10/site-packages/transformers/trainer.py", line 2245, in train
+    return inner_training_loop(
+  File "/Users/vblack/opt/miniconda3/envs/qwen/lib/python3.10/site-packages/transformers/trainer.py", line 2514, in _inner_training_loop
+    batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches, args.device)
+TypeError: DPOTrainer.get_batch_samples() takes 3 positional arguments but 4 were given

@@ -6,14 +6,17 @@ Evaluates resistance to prompt injection attacks
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel
 import argparse
 import logging
+import json
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class DPOModelTester:
-    def __init__(self, model_path: str, device: str = None):
+    def __init__(self, model_path: str, device: str = None, base_model: str = "Qwen/Qwen3-0.6B"):
         # Setup device
         if device is None:
             if torch.backends.mps.is_available():
@@ -27,36 +30,82 @@ class DPOModelTester:
         
         logger.info(f"Using device: {self.device}")
         
-        # Load model and tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            torch_dtype=torch.float16 if self.device.type in ['cuda', 'mps'] else torch.float32,
-            trust_remote_code=True
-        ).to(self.device)
+        # Check if model_path is local directory or HuggingFace model name
+        is_local_path = os.path.exists(model_path)
         
-        logger.info(f"Loaded DPO model from {model_path}")
+        if is_local_path:
+            # Local path - check for LoRA adapters
+            training_info_path = os.path.join(model_path, 'training_info.json')
+            use_lora = False
+            
+            if os.path.exists(training_info_path):
+                with open(training_info_path, 'r') as f:
+                    training_info = json.load(f)
+                    use_lora = training_info.get('use_lora', False)
+            else:
+                # Check for adapter files
+                use_lora = os.path.exists(os.path.join(model_path, 'adapter_model.bin')) or \
+                          os.path.exists(os.path.join(model_path, 'adapter_model.safetensors'))
+            
+            logger.info(f"Loading local {'LoRA' if use_lora else 'full'} model from {model_path}")
+            
+            # Load tokenizer
+            tokenizer_path = model_path if os.path.exists(os.path.join(model_path, 'tokenizer.json')) else base_model
+            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, trust_remote_code=True)
+            
+            if use_lora:
+                # Load base model and LoRA adapters
+                base_model_loaded = AutoModelForCausalLM.from_pretrained(
+                    base_model,
+                    torch_dtype=torch.float16 if self.device.type in ['cuda', 'mps'] else torch.float32,
+                    trust_remote_code=True
+                )
+                self.model = PeftModel.from_pretrained(base_model_loaded, model_path).to(self.device)
+            else:
+                # Load local full model
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    model_path,
+                    torch_dtype=torch.float16 if self.device.type in ['cuda', 'mps'] else torch.float32,
+                    trust_remote_code=True
+                ).to(self.device)
+                
+        else:
+            # HuggingFace model name
+            logger.info(f"Loading HuggingFace model: {model_path}")
+            self.tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                torch_dtype=torch.float16 if self.device.type in ['cuda', 'mps'] else torch.float32,
+                trust_remote_code=True
+            ).to(self.device)
+        
+        self.model.eval()
     
     def generate_response(self, prompt: str, max_new_tokens: int = 100) -> str:
         """Generate response to a prompt"""
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
-        
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                temperature=0.7,
-                do_sample=True,
-                pad_token_id=self.tokenizer.eos_token_id
-            )
-        
-        # Decode only the new tokens
-        response = self.tokenizer.decode(
-            outputs[0][len(inputs.input_ids[0]):], 
-            skip_special_tokens=True
+        texts = self.tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}],
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False
         )
         
-        return response.strip()
+        inputs = self.tokenizer(texts, return_tensors="pt").to(self.device)
+        
+        outputs = self.model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens
+        )
+        
+        output_ids = outputs[0][len(inputs.input_ids[0]):].tolist()
+        try:
+            index = len(output_ids) - output_ids[::-1].index(151668)
+        except ValueError:
+            index = 0
+        thinking_content = self.tokenizer.decode(output_ids[:index], skip_special_tokens=True)
+        content = self.tokenizer.decode(output_ids[index:], skip_special_tokens=True).strip("\n")
+        
+        return content.strip()
     
     def test_prompt_injection_resistance(self):
         """Test model's resistance to prompt injection attacks"""
@@ -164,14 +213,15 @@ class DPOModelTester:
 
 def main():
     parser = argparse.ArgumentParser(description="Test DPO-trained Qwen3 model")
-    parser.add_argument("--model_path", type=str, default="../outputs/dpo_qwen3_0.6b/final",
-                        help="Path to DPO-trained model")
+    parser.add_argument("--model_path", type=str, default="Qwen/Qwen3-0.6B",
+                        help="Path to DPO-trained model (LoRA adapters or full model)")
     parser.add_argument("--device", type=str, default=None, help="Device to use")
+    parser.add_argument("--base_model", type=str, default="Qwen/Qwen3-0.6B", help="Base model for LoRA")
     
     args = parser.parse_args()
     
     # Initialize tester
-    tester = DPOModelTester(args.model_path, args.device)
+    tester = DPOModelTester(args.model_path, args.device, args.base_model)
     
     # Run tests
     tester.test_normal_functionality()
