@@ -10,20 +10,29 @@ echo "Using LoRA for memory-efficient training"
 echo "================================"
 
 # Create output directory
-mkdir -p ../outputs
+
+DATA_PATH=data/dpo_data_train.jsonl
+OUTPUT_DIR=model_outputs/dpo_qwen3_0.6b_lora
+EPOCHS=2
+BATCH_SIZE=8
+LEARNING_RATE=5e-5
+LORA_R=16
+LORA_ALPHA=32
+NUM_SAMPLES=100
+mkdir -p model_outputs
 
 # Run DPO training with LoRA (lightweight settings)
 python dpo_training.py \
-    --data_path data/dpo_alpaca_prompt_injection_500.jsonl \
-    --output_dir ../outputs/dpo_qwen3_0.6b_lora \
-    --epochs 2 \
-    --batch_size 8 \
-    --learning_rate 5e-5 \
+    --data_path $DATA_PATH \
+    --output_dir $OUTPUT_DIR \
+    --epochs $EPOCHS \
+    --batch_size $BATCH_SIZE \
+    --learning_rate $LEARNING_RATE \
     --use_lora \
-    --lora_r 16 \
-    --lora_alpha 32 \
-    --num_samples 200
+    --lora_r $LORA_R \
+    --lora_alpha $LORA_ALPHA \
+    --num_samples $NUM_SAMPLES
 
 echo "================================"
 echo "DPO Training completed!"
-echo "LoRA adapters saved to: ../outputs/dpo_qwen3_0.6b_lora/final" 
+echo "LoRA adapters saved to: model_outputs/dpo_qwen3_0.6b_lora/final" 

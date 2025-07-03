@@ -115,6 +115,7 @@ def main():
     #     report_to=None,
     # )
     dpo_config = DPOConfig(
+        output_dir=args.output_dir,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
         learning_rate=args.learning_rate,
