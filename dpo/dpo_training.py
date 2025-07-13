@@ -6,11 +6,13 @@ Lightweight DPO Training for Qwen3 0.6B Model using HF DPOTrainer
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
 from peft import LoraConfig, get_peft_model, TaskType
-from trl import DPOTrainer, DPOConfig
+from trl import DPOConfig, DPOTrainer
+from loss import CustomDPOTrainer
 from datasets import Dataset
 import jsonlines
 import argparse
 import logging
+import wandb
 from test_dpo_model import ModelTester
 
 logging.basicConfig(level=logging.INFO)
@@ -71,21 +73,36 @@ def setup_model_and_tokenizer(model_name: str, use_lora: bool = True,
 
 def main():
     parser = argparse.ArgumentParser(description="DPO Training with HF DPOTrainer")
-    parser.add_argument("--data_path", type=str, default="data/dpo_alpaca_prompt_injection_500.jsonl")
-    parser.add_argument("--output_dir", type=str, default="../outputs/dpo_qwen3_0.6b_lora")
+    parser.add_argument("--data_path", type=str, default="data/dpo_data_train_500.jsonl")
+    parser.add_argument("--output_dir", type=str, default="model_outputs/dpo_qwen3_0.6b")
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--learning_rate", type=float, default=1e-4)
-    parser.add_argument("--num_samples", type=int, default=None)
+    parser.add_argument("--num_samples", type=int, default=100)
     
     # LoRA arguments
     parser.add_argument("--use_lora", action="store_true", default=True)
     parser.add_argument("--no_lora", action="store_true")
-    parser.add_argument("--lora_r", type=int, default=16)
+    parser.add_argument("--lora_r", type=int, default=8)
     parser.add_argument("--lora_alpha", type=int, default=32)
     parser.add_argument("--lora_dropout", type=float, default=0.1)
     
     args = parser.parse_args()
+    
+    # Initialize wandb
+    wandb.init(
+        project="dpo_prompt_injection",
+        name=f"dpo_qwen3_0.6b_lora_{args.epochs}epochs_bs{args.batch_size}",
+        config={
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "learning_rate": args.learning_rate,
+            "lora_r": args.lora_r,
+            "lora_alpha": args.lora_alpha,
+            "lora_dropout": args.lora_dropout,
+            "num_samples": args.num_samples,
+        }
+    )
     
     use_lora = args.use_lora and not args.no_lora
     
@@ -102,28 +119,25 @@ def main():
         lora_dropout=args.lora_dropout
     )
     
-    # Training arguments
-    # training_args = TrainingArguments(
-    #     output_dir=args.output_dir,
-    #     num_train_epochs=args.epochs,
-    #     per_device_train_batch_size=args.batch_size,
-    #     learning_rate=args.learning_rate,
-    #     logging_steps=10,
-    #     save_steps=100,
-    #     eval_steps=100,
-    #     warmup_steps=50,
-    #     remove_unused_columns=False,
-    #     report_to=None,
-    # )
     dpo_config = DPOConfig(
-        output_dir=args.output_dir,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
         learning_rate=args.learning_rate,
         logging_steps=10,
         save_steps=100,
+        loss_type='ipo',
+        # Wandb configuration
+        report_to="wandb",
+        logging_strategy="steps",
+        evaluation_strategy="no",
+        save_strategy="steps",
+        logging_first_step=True,
+        # Project and run name for wandb
+        run_name=f"dpo_qwen3_0.6b_lora_{args.epochs}epochs_bs{args.loss_type}",
     )
-    
+    loss_type = dpo_config.loss_type
+    output_dir = args.output_dir + f"_{loss_type}"
+    dpo_config.output_dir = output_dir
     # Initialize DPO trainer
     trainer = DPOTrainer(
         model=model,
@@ -137,12 +151,12 @@ def main():
     
     # Save final model
     trainer.save_model()
-    logger.info(f"Training completed! Model saved to {args.output_dir}")
+    logger.info(f"Training completed! Model saved to {output_dir}")
     
     logger.info("Testing the model...")
-    log_path = f"outputs/{args.output_dir}.jsonl"
+    log_path = f"outputs/{output_dir}.jsonl"
     tester = ModelTester(
-        model_path=args.output_dir,
+        model_path=output_dir,
         data_path=args.data_path,
         log_path=log_path,
         num_samples=100,
@@ -152,6 +166,9 @@ def main():
     asr = tester.test_asr(test_prompt, test_target)
     logger.info(f"ASR: {asr}")
     logger.info(f"Log path: {log_path}")
+    
+    # Finish wandb run
+    wandb.finish()
 
 if __name__ == "__main__":
     main() 
