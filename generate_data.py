@@ -83,12 +83,34 @@ def data_with_input(data_path, output_path, num_samples):
     with open(output_path, 'w') as f:
         for d_item in processed_data:
             f.write(json.dumps(d_item) + '\n')
-
+            
+def all_data_with_input(data_path, output_path):
+    data = load_jsonl(data_path)
+    processed_data = []
+    for d_item in data:
+        if d_item['input'] == '':
+            continue
+        processed_data.append(d_item)
+    with open(output_path, 'w') as f:
+        for d_item in processed_data:
+            f.write(json.dumps(d_item) + '\n')
+            
+def split_data(data_path, train_output_path, test_output_path, split_ratio=0.9):
+    # split data into train, test
+    data = load_jsonl(data_path)
+    train_data = data[:int(len(data) * split_ratio)]
+    test_data = data[int(len(data) * split_ratio):]
+    with open(train_output_path, 'w') as f:
+        for d_item in train_data:
+            f.write(json.dumps(d_item) + '\n')
+    with open(test_output_path, 'w') as f:
+        for d_item in test_data:
+            f.write(json.dumps(d_item) + '\n')
         
 if __name__ == '__main__':
-    num_samples = 500
-    data_path = 'datasets/alpaca_data.jsonl'
-    output_path = f'datasets/alpaca_data_with_input_{num_samples}.jsonl'
-    data_with_input(data_path, output_path, num_samples)
+    data_path = 'datasets/alpaca_data_with_input.jsonl'
+    train_output_path = 'datasets/alpaca_data_with_input_train.jsonl'
+    test_output_path = 'datasets/alpaca_data_with_input_test.jsonl'
+    split_data(data_path, train_output_path, test_output_path)
     
-    
+

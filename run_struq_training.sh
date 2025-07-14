@@ -8,7 +8,7 @@ DATA_PATH="datasets/alpaca_data_with_input_500.jsonl"
 ATTACK_TYPE="SpclSpclSpcl_Ignore"
 OUTPUT_DIR="./outputs/struq_training/qwen3-0.6b_500"
 NUM_EPOCHS=3
-BATCH_SIZE=16
+BATCH_SIZE=8
 LEARNING_RATE=2e-5
 MAX_LENGTH=512
 
