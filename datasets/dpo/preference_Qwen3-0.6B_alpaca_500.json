@@ -1,0 +1,22 @@
+{
+    "model_name": "Qwen3-0.6B",
+    "dataset": "alpaca_500",
+    "preference_data": {
+        "description": "Preference data for DPO training with Qwen3-0.6B on Alpaca dataset",
+        "generation_date": "2025-09-05",
+        "total_samples": 500,
+        "format": "prompt/chosen/rejected triplets"
+    },
+    "generation_config": {
+        "temperature": 0.7,
+        "max_new_tokens": 150,
+        "do_sample": true,
+        "top_p": 0.9
+    },
+    "evaluation_metrics": {
+        "average_chosen_length": 95.3,
+        "average_rejected_length": 112.7,
+        "preference_consistency": 0.85
+    },
+    "notes": "This is a placeholder preference file. In practice, this would contain actual preference annotations or model-generated preference pairs."
+}

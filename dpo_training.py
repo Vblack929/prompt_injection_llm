@@ -11,17 +11,22 @@ import torch
 import logging
 import argparse
 import jsonlines
-import wandb
+# import wandb  # Disabled
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
 from peft import LoraConfig, get_peft_model, TaskType
-from trl import DPOConfig, DPOTrainer
 from datasets import Dataset
+import torch
+from dataclasses import dataclass
+from typing import Dict, List, Any
 
 from loss import CustomDPOTrainer
-from test_dpo_model import ModelTester
-
+# from simpo_trainer import SimPOTrainer
+# from simpo_config import SIMPO_DEFAULTS
+from custom_dataset import DPODataset
+from test import ModelTester
 from setup import setup
+from datetime import datetime
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -32,29 +37,40 @@ logger = logging.getLogger(__name__)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-def load_dpo_dataset(data_path: str, num_samples: int = None) -> Dataset:
-    """
-    Load and format DPO dataset for HF DPOTrainer
+def dpo_collate_fn(features: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Simple collate function for DPO training"""
+    batch = {}
     
-    Args:
-        data_path: Path to the JSONL dataset file
-        num_samples: Number of samples to load (None for all)
+    # Stack tensor fields
+    tensor_keys = [
+        "prompt_input_ids", "prompt_attention_mask",
+        "chosen_input_ids", "chosen_attention_mask", "chosen_labels",
+        "rejected_input_ids", "rejected_attention_mask", "rejected_labels"
+    ]
     
-    Returns:
-        Dataset: HuggingFace dataset with prompt/chosen/rejected format
-    """
-    data = []
-    with jsonlines.open(data_path, 'r') as reader:
-        for item in reader:
-            data.append({
-                'prompt': item['prompt'],
-                'chosen': item['chosen'], 
-                'rejected': item['rejected']
-            })
-            if num_samples is not None and len(data) >= num_samples:
-                break
+    for key in tensor_keys:
+        if key in features[0]:
+            batch[key] = torch.stack([f[key] for f in features])
     
-    return Dataset.from_list(data)
+    # Keep string fields as lists
+    # string_keys = ["question", "prompt", "chosen", "rejected"]
+    # for key in string_keys:
+    #     if key in features[0]:
+    #         batch[key] = [f[key] for f in features]
+    
+    return batch
+
+
+def create_ref_model(model_path: str):
+    """Create reference model for DPO training"""
+    ref_model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        torch_dtype='auto',
+        device_map='auto',
+        trust_remote_code=True
+    )
+    ref_model.eval()
+    return ref_model
 
 
 def setup_model_and_tokenizer(
@@ -85,7 +101,8 @@ def setup_model_and_tokenizer(
     # Load model
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
-        torch_dtype=torch.float16,
+        torch_dtype='auto',
+        device_map='auto',
         trust_remote_code=True
     )
     
@@ -102,78 +119,47 @@ def setup_model_and_tokenizer(
         model = get_peft_model(model, lora_config)
         
         # Print trainable parameters
-        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        total_params = sum(p.numel() for p in model.parameters())
-        logger.info(f"Trainable parameters: {trainable_params:,} ({trainable_params/total_params*100:.2f}%)")
+        model.print_trainable_parameters()
     
     return model, tokenizer
 
 
 def setup_wandb(args):
     """
-    Setup wandb logging with automatic login
-    
-    Args:
-        args: Training arguments
-    
-    Returns:
-        bool: True if wandb setup successful, False otherwise
+    Setup wandb logging - DISABLED
     """
-    try:
-        wandb.login()
-        wandb.init(
-            project="dpo_prompt_injection",
-            name=f"dpo_qwen3_0.6b_{args.epochs}epochs_loss_{args.loss_type}",
-            config={
-                "epochs": args.epochs,
-                "batch_size": args.batch_size,
-                "learning_rate": args.learning_rate,
-                "lora_r": args.lora_r,
-                "lora_alpha": args.lora_alpha,
-                "lora_dropout": args.lora_dropout,
-                "num_samples": args.num_samples,
-            }
-        )
-        logger.info("✓ wandb initialized successfully")
-        return True
-    except Exception as e:
-        logger.warning(f"wandb initialization failed: {e}")
-        logger.info("Continuing without wandb logging...")
-        return False
+    logger.info("wandb logging disabled")
+    return False
 
 
 def setup_training_config(args):
     """
-    Setup DPO training configuration
+    Setup training configuration
     
     Args:
         args: Training arguments
     
     Returns:
-        DPOConfig: Training configuration
+        TrainingArguments: Training configuration
     """
-    dpo_config = DPOConfig(
+    output_dir = args.output_dir + f"_{args.loss_type}" + f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    training_args = TrainingArguments(
+        output_dir=output_dir,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
         learning_rate=args.learning_rate,
         logging_steps=10,
         save_steps=100,
-        loss_type='ipo',
-        # Wandb configuration
-        report_to="wandb",
+        # Disable wandb
+        report_to="none",
         logging_strategy="steps",
         eval_strategy="no",
         save_strategy="steps",
-        logging_first_step=True,
-        # Project and run name for wandb
-        run_name=f"dpo_qwen3_0.6b_{args.epochs}epochs_loss_{args.loss_type}",
+        remove_unused_columns=False,
     )
     
-    loss_type = dpo_config.loss_type
-    output_dir = args.output_dir + f"_{loss_type}"
-    dpo_config.output_dir = output_dir
-    
-    return dpo_config, output_dir
+    return training_args, output_dir
 
 
 def test_model(model_path: str, data_path: str, num_samples: int = 100):
@@ -231,22 +217,14 @@ def parse_arguments():
     
     return parser.parse_args()
 
-
-def main():
-    setup()
+def train():
     """Main training function"""
-    # Parse arguments
+    setup()
     args = parse_arguments()
     
-    # Setup wandb logging
-    wandb_enabled = setup_wandb(args)
-    # Determine LoRA usage
+    # Setup wandb - disabled
+    wandb_enabled = False
     use_lora = args.use_lora and not args.no_lora
-    
-    # Load dataset
-    logger.info("Loading dataset...")
-    dataset = load_dpo_dataset(args.data_path, args.num_samples)
-    logger.info(f"Loaded {len(dataset)} examples")
     
     # Setup model and tokenizer
     logger.info("Setting up model and tokenizer...")
@@ -254,42 +232,61 @@ def main():
         model_path=args.model_path,
         use_lora=use_lora,
         lora_r=args.lora_r,
-        lora_alpha=args.lora_alpha, 
+        lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout
     )
     
-    # Setup training configuration
-    dpo_config, output_dir = setup_training_config(args)
+    logger.info(f"Model and tokenizer loaded from {args.model_path}")
     
-    # Initialize DPO trainer
-    logger.info("Initializing DPO trainer...")
-    trainer = DPOTrainer(
-        model=model,
-        args=dpo_config,
-        train_dataset=dataset,
-        processing_class=tokenizer,
+    # Create reference model
+    if args.loss_type != "simpo":
+        logger.info("Creating reference model...")
+        ref_model = create_ref_model(args.model_path)
+        logger.info(f"Ref model loaded from {args.model_path}")
+    else:
+        ref_model = None
+        
+        
+    # Load dataset with custom DPODataset
+    logger.info("Loading custom DPO dataset...")
+    dataset = DPODataset(
+        data_path=args.data_path,
+        tokenizer=tokenizer,
+        num_samples=args.num_samples,
+        max_length=256,
     )
+    logger.info(f"Loaded {len(dataset)} examples with prompt injection")
     
+    # Setup training config
+    training_args, output_dir = setup_training_config(args)
+    
+    # Use simple collate function
+    data_collator = dpo_collate_fn
+    
+    # Initialize custom trainer
+    logger.info("Initializing custom DPO trainer...")
+    trainer = CustomDPOTrainer(
+        model=model,
+        ref_model=ref_model,
+        args=training_args,
+        train_dataset=dataset,
+        data_collator=data_collator,
+        loss_fn=args.loss_type,
+        beta=0.5,
+        return_outputs=True
+    )
     # Train
     logger.info("Starting training...")
     trainer.train()
-    
-    # Save final model
     trainer.save_model()
     logger.info(f"Training completed! Model saved to {output_dir}")
     
-    # Test the model
-    logger.info("Testing the model...")
+    # Test model
+    logger.info("Testing model...")
     test_model(output_dir, args.data_path, num_samples=100)
     
-    # Finish wandb run
-    if wandb_enabled:
-        try:
-            wandb.finish()
-            logger.info("✓ wandb run finished")
-        except:
-            pass
 
 
 if __name__ == "__main__":
-    main() 
+    args = parse_arguments()
+    train()
