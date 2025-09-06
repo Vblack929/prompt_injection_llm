@@ -82,18 +82,34 @@ class DPODataset(Dataset):
         chat_rejected = [{"role": "user", "content": prompt}, {"role": "assistant", "content": rejected}]
         prompt_only   = [{"role": "user", "content": prompt}]
 
-        # Tokenize using the chat template (return token ids)
-        prompt_tokens      = self.tokenizer.apply_chat_template(prompt_only, tokenize=True, add_generation_prompt=False)
-        chosen_token_ids   = self.tokenizer.apply_chat_template(chat_chosen, tokenize=True, add_generation_prompt=False)
-        rejected_token_ids = self.tokenizer.apply_chat_template(chat_rejected, tokenize=True, add_generation_prompt=False)
+        # Tokenize using chat template if available; otherwise, fall back to a simple manual format
+        try:
+            prompt_tokens      = self.tokenizer.apply_chat_template(prompt_only, tokenize=True, add_generation_prompt=False)
+            chosen_token_ids   = self.tokenizer.apply_chat_template(chat_chosen, tokenize=True, add_generation_prompt=False)
+            rejected_token_ids = self.tokenizer.apply_chat_template(chat_rejected, tokenize=True, add_generation_prompt=False)
 
-        # Assistant-only tails to locate label regions (before padding)
-        assistant_only_ch = self.tokenizer.apply_chat_template(
-            [{"role": "assistant", "content": chosen}], tokenize=True, add_generation_prompt=False
-        )
-        assistant_only_rj = self.tokenizer.apply_chat_template(
-            [{"role": "assistant", "content": rejected}], tokenize=True, add_generation_prompt=False
-        )
+            # Assistant-only tails to locate label regions (before padding)
+            assistant_only_ch = self.tokenizer.apply_chat_template(
+                [{"role": "assistant", "content": chosen}], tokenize=True, add_generation_prompt=False
+            )
+            assistant_only_rj = self.tokenizer.apply_chat_template(
+                [{"role": "assistant", "content": rejected}], tokenize=True, add_generation_prompt=False
+            )
+        except Exception:
+            # Manual fallback: "User: ...\n\nAssistant: ..." format without special tokens
+            user_prefix = "User: "
+            assistant_prefix = "Assistant: "
+            sep = "\n\n"
+            prompt_text = f"{user_prefix}{prompt}{sep}"
+            chosen_text = f"{prompt_text}{assistant_prefix}{chosen}"
+            rejected_text = f"{prompt_text}{assistant_prefix}{rejected}"
+
+            prompt_tokens      = self.tokenizer.encode(prompt_text, add_special_tokens=False)
+            chosen_token_ids   = self.tokenizer.encode(chosen_text, add_special_tokens=False)
+            rejected_token_ids = self.tokenizer.encode(rejected_text, add_special_tokens=False)
+
+            assistant_only_ch = self.tokenizer.encode(f"{assistant_prefix}{chosen}", add_special_tokens=False)
+            assistant_only_rj = self.tokenizer.encode(f"{assistant_prefix}{rejected}", add_special_tokens=False)
         as_len_ch = len(assistant_only_ch)
         as_len_rj = len(assistant_only_rj)
 

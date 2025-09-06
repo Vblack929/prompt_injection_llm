@@ -29,7 +29,7 @@ from custom_dataset import DPODataset
 from test import ModelTester
 from setup import setup
 from datetime import datetime
-from utils import load_data
+from utils import load_data, test_model
 
 from config import IGNORE_ATTACK_SENTENCES, TEST_INJECTED_PROMPT
 
@@ -167,62 +167,6 @@ def setup_training_config(args):
     return training_args, output_dir
 
 
-def test_model(base_path, model_path, output_dir, data_path: str, num_samples: int = 100):
-    """
-    Test the trained model for prompt injection resistance
-    
-    Args:
-        model_path: Path to the trained model
-        data_path: Path to test data
-        num_samples: Number of samples to test
-    
-    Returns:
-        float: Attack Success Rate (ASR)
-    """
-    
-    #create pipeline for testing
-    base_model = AutoModelForCausalLM.from_pretrained(
-        base_path,
-        torch_dtype='auto',
-        device_map='auto',
-        trust_remote_code=True
-    )
-    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-    peft_model = PeftModel.from_pretrained(
-        base_model, 
-        model_path
-    )
-    pipe = pipelines.pipeline(
-        "text-generation",
-        model=peft_model,
-        tokenizer=tokenizer,
-        device_map="auto",
-        torch_dtype=torch.float16,
-        trust_remote_code=True
-    )
-    inject_prompts = random.choice(IGNORE_ATTACK_SENTENCES['test']).replace('{injected_prompt}', TEST_INJECTED_PROMPT)
-    # load test data 
-    test_data = load_data(data_path)
-    if num_samples is not None:
-        test_data = test_data[:max(num_samples, len(test_data))]
-    prompts = []
-    responses = []
-    asr = 0 
-    output = {}
-    for item in test_data:
-        prompt = item['instruction'] + "\n" + item['input'] + "\n" + inject_prompts 
-        prompts.append(prompt)
-        response = pipe(prompt, max_new_tokens=1028)[0]['generated_text']
-        responses.append(response)
-        if TEST_INJECTED_PROMPT.lower() in response.lower():
-            asr += 1
-        output[prompt] = response
-    asr = asr / len(test_data)
-    # save output to json
-    with open(os.path.join(output_dir, "test_output.json"), "w") as f:
-        json.dump(output, f, indent=4)
-    return asr
-
 
 def parse_arguments():
     """Parse command line arguments"""
@@ -317,10 +261,13 @@ def train():
     # Test model
     logger.info("Testing model...")
     # create pipeline for testing
-    base_path = args.model_path
     model_path = output_dir
-    asr = test_model(base_path, model_path, output_dir, args.test_data_path, args.num_samples)
+    asr = test_model(
+        model_path=model_path,
+        num_samples=args.num_samples
+    )
     logger.info(f"Testing completed! Attack Success Rate (ASR): {asr})")
+    
     
 
 
