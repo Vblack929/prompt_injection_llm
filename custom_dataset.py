@@ -47,12 +47,18 @@ class DPODataset(Dataset):
             self.data = load_dpo_dataset(data_path, num_samples)
 
         # Inject attack sentence into prompt while keeping the clean question for reference
+        # Avoid double-injecting if dataset already contains an ignore/injected phrase
         self.preference_data = deepcopy(self.data)
         for item in self.preference_data:
             item['question'] = item['prompt']
-            item['prompt'] = item['question'] + ' ' + random.choice(
-                IGNORE_ATTACK_SENTENCES['train']
-            ).format(injected_prompt=TEST_INJECTED_PROMPT)
+            lower_q = item['question'].lower()
+            already_injected = ('ignore the previous instructions' in lower_q) or (str(TEST_INJECTED_PROMPT).lower() in lower_q)
+            if not already_injected:
+                item['prompt'] = item['question'] + ' ' + random.choice(
+                    IGNORE_ATTACK_SENTENCES['train']
+                ).format(injected_prompt=TEST_INJECTED_PROMPT)
+            else:
+                item['prompt'] = item['question']
         self.data = self.preference_data
         self.pad = pad
 
@@ -76,52 +82,58 @@ class DPODataset(Dataset):
         chat_rejected = [{"role": "user", "content": prompt}, {"role": "assistant", "content": rejected}]
         prompt_only   = [{"role": "user", "content": prompt}]
 
-        # Tokenize using the chat template (recommended for chat LLMs)
-        prompt_tokens      = self.tokenizer.apply_chat_template(prompt_only)
-        chosen_input_ids   = self.tokenizer.apply_chat_template(chat_chosen)
-        rejected_input_ids = self.tokenizer.apply_chat_template(chat_rejected)
+        # Tokenize using the chat template (return token ids)
+        prompt_tokens      = self.tokenizer.apply_chat_template(prompt_only, tokenize=True, add_generation_prompt=False)
+        chosen_token_ids   = self.tokenizer.apply_chat_template(chat_chosen, tokenize=True, add_generation_prompt=False)
+        rejected_token_ids = self.tokenizer.apply_chat_template(chat_rejected, tokenize=True, add_generation_prompt=False)
 
-        prompt_ids   = torch.tensor(prompt_tokens, dtype=torch.long)
-        chosen_ids   = torch.tensor(chosen_input_ids, dtype=torch.long)
-        rejected_ids = torch.tensor(rejected_input_ids, dtype=torch.long)
+        # Assistant-only tails to locate label regions (before padding)
+        assistant_only_ch = self.tokenizer.apply_chat_template(
+            [{"role": "assistant", "content": chosen}], tokenize=True, add_generation_prompt=False
+        )
+        assistant_only_rj = self.tokenizer.apply_chat_template(
+            [{"role": "assistant", "content": rejected}], tokenize=True, add_generation_prompt=False
+        )
+        as_len_ch = len(assistant_only_ch)
+        as_len_rj = len(assistant_only_rj)
 
-        # Pad / truncate to max_length
-        def pad_to_max(t: torch.Tensor):
-            if t.shape[0] < self.max_length:
-                pad_len = self.max_length - t.shape[0]
-                t = torch.cat([t, torch.full((pad_len,), self.tokenizer.pad_token_id, dtype=torch.long)])
-            else:
-                t = t[:self.max_length]
-            return t
+        # Compute response starts on unpadded sequences
+        ch_len = len(chosen_token_ids)
+        rj_len = len(rejected_token_ids)
+        resp_start_ch = max(0, ch_len - as_len_ch)
+        resp_start_rj = max(0, rj_len - as_len_rj)
 
-        prompt_ids   = pad_to_max(prompt_ids)
-        chosen_ids   = pad_to_max(chosen_ids)
-        rejected_ids = pad_to_max(rejected_ids)
+        # Right-align truncation (keep tail so assistant labels stay)
+        def right_align_pad(ids_list):
+            ids = torch.tensor(ids_list, dtype=torch.long)
+            if ids.shape[0] > self.max_length:
+                ids = ids[-self.max_length:]
+            elif ids.shape[0] < self.max_length:
+                pad_len = self.max_length - ids.shape[0]
+                ids = torch.cat([ids, torch.full((pad_len,), self.tokenizer.pad_token_id, dtype=torch.long)])
+            return ids
+
+        # Apply right-aligned pad/truncation
+        prompt_ids   = right_align_pad(prompt_tokens)
+        chosen_ids   = right_align_pad(chosen_token_ids)
+        rejected_ids = right_align_pad(rejected_token_ids)
+
+        # Compute label starts after possible truncation offset
+        ch_offset = max(0, ch_len - self.max_length)
+        rj_offset = max(0, rj_len - self.max_length)
+        label_start_ch = max(0, resp_start_ch - ch_offset)
+        label_start_rj = max(0, resp_start_rj - rj_offset)
 
         # Attention masks
         prompt_attention_mask   = (prompt_ids   != self.tokenizer.pad_token_id).long()
         chosen_attention_mask   = (chosen_ids   != self.tokenizer.pad_token_id).long()
         rejected_attention_mask = (rejected_ids != self.tokenizer.pad_token_id).long()
 
-        # Labels: mask everything except the last assistant message span
+        # Labels: mask everything except assistant span; mask pads
         chosen_labels   = chosen_ids.clone()
         rejected_labels = rejected_ids.clone()
-
-        # Find assistant-only tail lengths by templating assistant alone
-        assistant_only_ch = self.tokenizer.apply_chat_template(
-            [{"role": "assistant", "content": chosen}], add_generation_prompt=False
-        )
-        assistant_only_rj = self.tokenizer.apply_chat_template(
-            [{"role": "assistant", "content": rejected}], add_generation_prompt=False
-        )
-        as_len_ch = len(assistant_only_ch)
-        as_len_rj = len(assistant_only_rj)
-
-        resp_start_ch = max(0, len(chosen_ids)   - as_len_ch)
-        resp_start_rj = max(0, len(rejected_ids) - as_len_rj)
-
-        chosen_labels[:resp_start_ch]   = IGNORE_INDEX
-        rejected_labels[:resp_start_rj] = IGNORE_INDEX
+        chosen_labels[:label_start_ch]   = IGNORE_INDEX
+        rejected_labels[:label_start_rj] = IGNORE_INDEX
         chosen_labels[chosen_labels == self.tokenizer.pad_token_id]     = IGNORE_INDEX
         rejected_labels[rejected_labels == self.tokenizer.pad_token_id] = IGNORE_INDEX
 

@@ -111,10 +111,14 @@ def dpo_loss(main_model, ref_model, batch, beta=0.5):
             labels=batch['rejected_labels'].to(device),
         )
 
-    logp_ch      = -ch_out.loss
-    logp_rj      = -rj_out.loss
-    logp_ref_ch  = -ref_ch_out.loss
-    logp_ref_rj  = -ref_rj_out.loss
+    # Use sequence log-prob sums (more faithful to DPO) instead of
+    # model-reported average CE. This avoids degenerate near-zero losses
+    # when averages saturate.
+    logp_ch      = get_sequence_log_probs(ch_out.logits, batch['chosen_labels'].to(device))
+    logp_rj      = get_sequence_log_probs(rj_out.logits, batch['rejected_labels'].to(device))
+    with torch.no_grad():
+        logp_ref_ch  = get_sequence_log_probs(ref_ch_out.logits, batch['chosen_labels'].to(device))
+        logp_ref_rj  = get_sequence_log_probs(ref_rj_out.logits, batch['rejected_labels'].to(device))
 
     delta_model = logp_ch - logp_rj
     delta_ref   = logp_ref_ch - logp_ref_rj
