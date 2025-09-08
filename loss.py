@@ -360,6 +360,43 @@ def simpo_loss(main_model, batch, beta: float = 2.0, gamma: float = 0.5):
     }
     return loss, stats
 
+def repo_loss(main_model, batch, gamma: float = 0.5):
+    """
+    RePO: ReLU-based max-margin loss (reference-free).
+    Margin M = r_ch - r_rj, where r_* are length-normalized (avg) log-probs.
+    Loss = ReLU(gamma - M).  Only pairs with M < gamma contribute gradients.
+    """
+    device = next(main_model.parameters()).device
+
+    ch_out = main_model(
+        input_ids=batch["chosen_input_ids"].to(device),
+        attention_mask=batch["chosen_attention_mask"].to(device),
+        labels=batch["chosen_labels"].to(device),
+    )
+    rj_out = main_model(
+        input_ids=batch["rejected_input_ids"].to(device),
+        attention_mask=batch["rejected_attention_mask"].to(device),
+        labels=batch["rejected_labels"].to(device),
+    )
+
+    # length-normalized (average) log-probs, same as your SimPO
+    r_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(device))
+    r_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(device))
+
+    margin = r_ch - r_rj
+    loss_vec = F.relu(gamma - margin)        # hinge / ReLU max-margin
+    loss = loss_vec.mean()
+
+    stats = {
+        "loss": float(loss.item()),
+        "r_ch_mean": float(r_ch.mean().item()),
+        "r_rj_mean": float(r_rj.mean().item()),
+        "margin_mean": float(margin.mean().item()),
+        "active_frac": float((loss_vec > 0).float().mean().item()),  # % of pairs still training
+        "gamma": gamma,
+    }
+    return loss, stats
+
 # -------------------------
 # Custom Trainer wrapper
 # -------------------------
@@ -390,6 +427,8 @@ class CustomDPOTrainer(Trainer):
             def _simpo(main_model, ref_model, batch, beta):
                 return simpo_loss(main_model, batch, beta=self.beta, gamma=self.gamma)
             self.loss_impl = _simpo
+        elif loss_fn == "repo":
+            self.loss_impl = repo_loss
         else:
             raise ValueError(f"Invalid loss function: {loss_fn}")
 
