@@ -4,7 +4,7 @@
 # Usage: ./run_dpo_training.sh [loss_type]
 # Available loss types: dpo, ipo, tdpo, bdpo, simpo
 
-LOSS_TYPE=${1:-"dpo"}
+LOSS_TYPE=${1:-"simpo"}
 echo "Starting DPO Training with loss: $LOSS_TYPE"
 
 python dpo_training.py \
@@ -16,7 +16,7 @@ python dpo_training.py \
     --learning_rate 5e-5 \
     --loss_type "$LOSS_TYPE" \
     --num_samples 500 \
-    --lora_r 8 \
+    --lora_r 4 \
     --lora_alpha 32 \
     --lora_dropout 0.1 \
     --use_lora

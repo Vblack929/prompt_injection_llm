@@ -18,8 +18,8 @@ def get_batch_loss(output, labels):
     Token-level cross-entropy (no reduction) with teacher-forcing shift.
     output: logits [B, T, V], labels [B, T]
     """
-    shifted_labels = labels[..., 1:].contiguous()
-    output = output[..., :-1, :].contiguous()
+    shifted_labels = labels[..., 1:]
+    output = output[..., :-1, :]
     loss_function = nn.CrossEntropyLoss(ignore_index=-100, reduction='none')
     loss = loss_function(output.transpose(-1, -2), shifted_labels)
     return loss  # [B, T-1]
@@ -29,27 +29,28 @@ def get_sequence_log_probs(logits, labels, ignore_index=-100):
     Sum of log-probs over non-masked positions (per sequence)
     logits [B, T, V], labels [B, T]
     """
-    log_probs = F.log_softmax(logits, dim=-1)
-    tgt = labels[:, 1:].contiguous()
-    lg  = log_probs[:, :-1, :].contiguous()
-    mask = (tgt != ignore_index).float()
-    tgt_safe = tgt.masked_fill(~(mask.bool()), 0)
-    tok_logp = torch.gather(lg, dim=-1, index=tgt_safe.unsqueeze(-1)).squeeze(-1)  # [B, T-1]
-    return (tok_logp * mask).sum(dim=-1)  # [B]
+    shifted_labels = labels[..., 1:]
+    logits = logits[..., :-1, :]
+    loss_function = nn.CrossEntropyLoss(ignore_index=-100, reduction='none')
+    log_probs = -loss_function(logits.transpose(-1, -2), shifted_labels)
+    sequence_log_probs = log_probs.sum(dim=-1)
+    return sequence_log_probs
 
-def _avg_logprob_from_logits(logits, labels, ignore_index=-100):
+def _avg_logprob_from_logits(logits, labels, ignore_index=-100, average_log_prob=True):
     """
     Average log-prob over non-ignored positions (per sequence)
     """
-    tgt = labels[:, 1:].contiguous()
-    lg  = logits[:, :-1, :].contiguous()
-    mask = (tgt != ignore_index)
-    tgt_safe = tgt.masked_fill(~mask, 0)
-    logps = F.log_softmax(lg, dim=-1)
-    tok_logp = logps.gather(-1, tgt_safe.unsqueeze(-1)).squeeze(-1)  # [B, T-1]
-    tok_logp = tok_logp * mask
-    lengths = mask.sum(dim=-1).clamp_min(1)
-    return tok_logp.sum(dim=-1) / lengths  # [B]
+    logits = logits[:, :-1, :]
+    labels = labels[:, 1:].clone()
+    loss_mask = (labels != ignore_index)
+    labels[labels == ignore_index] = 0
+    per_token_logps = torch.gather(logits.log_softmax(-1), dim=2, index=labels.unsqueeze(2)).squeeze(2)
+    
+    if average_log_prob:
+        return (per_token_logps * loss_mask).sum(-1) / loss_mask.sum(-1)
+    else:
+        return (per_token_logps * loss_mask).sum(-1)
+    
 
 # -------------------------
 # NPO (optional)
@@ -326,7 +327,7 @@ def bdpo_loss(main_model, ref_model, batch, beta=0.5, lambda_mix: float = 0.5):
 # SimPO (reference-free)
 # -------------------------
 
-def simpo_loss(main_model, batch, beta: float = 2.0, gamma: float = 0.5):
+def simpo_loss(main_model, batch, beta: float = 2.0, gamma: float = 0.5, average_log_prob: bool = True):
     """
     SimPO: sequence-level average log-prob margin with target gap gamma (no ref).
     """
@@ -343,24 +344,23 @@ def simpo_loss(main_model, batch, beta: float = 2.0, gamma: float = 0.5):
         labels=batch["rejected_labels"].to(device),
     )
 
-    r_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(device))
-    r_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(device))
+    r_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(device), average_log_prob=average_log_prob)
+    r_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(device), average_log_prob=average_log_prob)
 
     pre = beta * ((r_ch - r_rj) - gamma)
     loss_vec = -F.logsigmoid(pre)
     loss = loss_vec.mean()
 
+    chosen_rewards = beta * r_ch.detach()
+    rejected_rewards = beta * r_rj.detach()
     stats = {
-        "loss": loss.item(),
-        "r_ch_mean": float(r_ch.mean().item()),
-        "r_rj_mean": float(r_rj.mean().item()),
-        "gap_mean": float((r_ch - r_rj).mean().item()),
-        "beta": beta,
-        "gamma": gamma,
+        'loss': loss.item(),
+        'chosen_rewards': chosen_rewards,
+        'rejected_rewards': rejected_rewards,
     }
     return loss, stats
 
-def repo_loss(main_model, batch, gamma: float = 0.5):
+def repo_loss(main_model, batch, gamma: float = 0.5, average_log_prob: bool = True):
     """
     RePO: ReLU-based max-margin loss (reference-free).
     Margin M = r_ch - r_rj, where r_* are length-normalized (avg) log-probs.
@@ -380,20 +380,17 @@ def repo_loss(main_model, batch, gamma: float = 0.5):
     )
 
     # length-normalized (average) log-probs, same as your SimPO
-    r_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(device))
-    r_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(device))
+    r_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(device), average_log_prob=average_log_prob)
+    r_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(device), average_log_prob=average_log_prob)
 
     margin = r_ch - r_rj
     loss_vec = F.relu(gamma - margin)        # hinge / ReLU max-margin
     loss = loss_vec.mean()
-
+    
     stats = {
-        "loss": float(loss.item()),
-        "r_ch_mean": float(r_ch.mean().item()),
-        "r_rj_mean": float(r_rj.mean().item()),
-        "margin_mean": float(margin.mean().item()),
-        "active_frac": float((loss_vec > 0).float().mean().item()),  # % of pairs still training
-        "gamma": gamma,
+        'loss': loss.item(),
+        'chosen_rewards': r_ch,
+        'rejected_rewards': r_rj,
     }
     return loss, stats
 
