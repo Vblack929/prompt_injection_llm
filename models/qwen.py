@@ -45,6 +45,8 @@ def _load_qwen_from_any(model_or_adapter_path: str):
         tokenizer = AutoTokenizer.from_pretrained(base_name, trust_remote_code=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
+        # Set padding side to left for decoder-only models (correct for generation)
+        tokenizer.padding_side = "left"
         base_model = AutoModelForCausalLM.from_pretrained(
             base_name, torch_dtype="auto", device_map="auto", trust_remote_code=True
         )
@@ -55,6 +57,8 @@ def _load_qwen_from_any(model_or_adapter_path: str):
         tokenizer = AutoTokenizer.from_pretrained(model_or_adapter_path, trust_remote_code=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
+        # Set padding side to left for decoder-only models (correct for generation)
+        tokenizer.padding_side = "left"
         model = AutoModelForCausalLM.from_pretrained(
             model_or_adapter_path, torch_dtype="auto", device_map="auto", trust_remote_code=True
         )

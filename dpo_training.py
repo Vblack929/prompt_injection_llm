@@ -5,33 +5,20 @@ Simple implementation with automatic wandb logging
 """
 
 import os
-import sys
-import subprocess
-import torch
 import logging
 import argparse
-import jsonlines
-import random
-import json
-# import wandb  # Disabled
-
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, pipelines
-from peft import LoraConfig, get_peft_model, TaskType, PeftModel
-from datasets import Dataset
 import torch
-from dataclasses import dataclass
+import matplotlib.pyplot as plt
+from datetime import datetime
 from typing import Dict, List, Any
 
-from loss import CustomDPOTrainer
-# from simpo_trainer import SimPOTrainer
-# from simpo_config import SIMPO_DEFAULTS
-from custom_dataset import DPODataset
-from test import ModelTester
-from setup import setup
-from datetime import datetime
-from utils import load_data, test_model
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+from peft import LoraConfig, get_peft_model, TaskType
 
-from config import IGNORE_ATTACK_SENTENCES, TEST_INJECTED_PROMPT
+from loss import CustomDPOTrainer
+from custom_dataset import DPODataset
+from setup import setup
+from generate_dpo_data import extract_model_name, generate_dpo_data
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -83,17 +70,21 @@ def setup_model_and_tokenizer(
     use_lora: bool = True, 
     lora_r: int = 16, 
     lora_alpha: int = 32, 
-    lora_dropout: float = 0.1
+    lora_dropout: float = 0.1,
+    lora_target_modules: List[str] = None,
+    lora_bias: str = "none"
 ):
     """
     Setup model and tokenizer with optional LoRA
     
     Args:
-        model_name: HuggingFace model name
+        model_path: HuggingFace model name or path
         use_lora: Whether to use LoRA for efficient fine-tuning
-        lora_r: LoRA rank
-        lora_alpha: LoRA alpha parameter
+        lora_r: LoRA rank (lower = fewer parameters)
+        lora_alpha: LoRA alpha parameter (scaling factor)
         lora_dropout: LoRA dropout rate
+        lora_target_modules: List of module names to apply LoRA to (default: ["q_proj", "v_proj"])
+        lora_bias: Bias handling ("none", "all", "lora_only")
     
     Returns:
         tuple: (model, tokenizer)
@@ -112,18 +103,28 @@ def setup_model_and_tokenizer(
     )
     
     if use_lora:
+        # Default target modules for Qwen/Llama models
+        if lora_target_modules is None:
+            lora_target_modules = ["q_proj", "v_proj"]
+        
         # Configure LoRA
         lora_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
             r=lora_r,
             lora_alpha=lora_alpha,
             lora_dropout=lora_dropout,
-            target_modules=["q_proj", "v_proj"],
-            bias="none",
+            target_modules=lora_target_modules,
+            bias=lora_bias,
         )
         model = get_peft_model(model, lora_config)
         
         # Print trainable parameters
+        logger.info("LoRA configuration:")
+        logger.info(f"  Rank (r): {lora_r}")
+        logger.info(f"  Alpha: {lora_alpha}")
+        logger.info(f"  Dropout: {lora_dropout}")
+        logger.info(f"  Target modules: {lora_target_modules}")
+        logger.info(f"  Bias: {lora_bias}")
         model.print_trainable_parameters()
     
     return model, tokenizer
@@ -167,6 +168,95 @@ def setup_training_config(args):
     return training_args, output_dir
 
 
+def plot_likelihoods(trainer, output_dir: str):
+    """
+    Plot three figures side by side: chosen likelihood, rejected likelihood, and margin.
+    
+    Args:
+        trainer: CustomDPOTrainer instance with step_metrics
+        output_dir: Directory to save the figure
+    """
+    if not trainer.step_metrics:
+        logger.warning("No step metrics recorded. Skipping visualization.")
+        return
+    
+    steps = [m['step'] for m in trainer.step_metrics]
+    chosen_likelihoods = [m['chosen_likelihood'] for m in trainer.step_metrics]
+    rejected_likelihoods = [m['rejected_likelihood'] for m in trainer.step_metrics]
+    margins = [m['margin'] for m in trainer.step_metrics]
+    
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    
+    # Plot 1: Chosen likelihood
+    axes[0].plot(steps, chosen_likelihoods, 'b-', linewidth=2, label='Chosen')
+    axes[0].set_xlabel('Step', fontsize=12)
+    axes[0].set_ylabel('Likelihood', fontsize=12)
+    axes[0].set_title('Model Likelihood to Chosen', fontsize=14, fontweight='bold')
+    axes[0].grid(True, alpha=0.3)
+    axes[0].legend()
+    
+    # Plot 2: Rejected likelihood
+    axes[1].plot(steps, rejected_likelihoods, 'r-', linewidth=2, label='Rejected')
+    axes[1].set_xlabel('Step', fontsize=12)
+    axes[1].set_ylabel('Likelihood', fontsize=12)
+    axes[1].set_title('Model Likelihood to Rejected', fontsize=14, fontweight='bold')
+    axes[1].grid(True, alpha=0.3)
+    axes[1].legend()
+    
+    # Plot 3: Margin (chosen - rejected)
+    axes[2].plot(steps, margins, 'g-', linewidth=2, label='Margin')
+    axes[2].axhline(y=0, color='k', linestyle='--', alpha=0.5)
+    axes[2].set_xlabel('Step', fontsize=12)
+    axes[2].set_ylabel('Margin (Chosen - Rejected)', fontsize=12)
+    axes[2].set_title('Likelihood Margin', fontsize=14, fontweight='bold')
+    axes[2].grid(True, alpha=0.3)
+    axes[2].legend()
+    
+    plt.tight_layout()
+    
+    # Save figure
+    figure_path = os.path.join(output_dir, 'likelihoods_plot.png')
+    plt.savefig(figure_path, dpi=150, bbox_inches='tight')
+    logger.info(f"Likelihood plots saved to {figure_path}")
+    plt.close()
+
+
+
+def get_or_generate_data_path(
+    model_path: str,
+    alpaca_path: str = "datasets/alpaca_data_with_input_500.jsonl",
+    output_dir: str = "datasets/dpo/model_generated",
+    batch_size: int = 16,
+):
+    """
+    Get the model-specific data path, generating it if it doesn't exist.
+    
+    Args:
+        model_path: Path to the model
+        alpaca_path: Path to alpaca dataset for generation
+        output_dir: Directory where generated data is stored
+        batch_size: Batch size for generation
+    
+    Returns:
+        str: Path to the data file
+    """
+    model_name = extract_model_name(model_path)
+    data_path = os.path.join(output_dir, f"{model_name}.jsonl")
+    
+    if os.path.exists(data_path):
+        logger.info(f"Found existing model-specific data at {data_path}")
+        return data_path
+    
+    logger.info(f"Model-specific data not found at {data_path}. Generating...")
+    generated_path = generate_dpo_data(
+        model_path=model_path,
+        alpaca_path=alpaca_path,
+        output_dir=output_dir,
+        batch_size=batch_size,
+    )
+    logger.info(f"Generated data saved to {generated_path}")
+    return generated_path
+
 
 def parse_arguments():
     """Parse command line arguments"""
@@ -174,23 +264,29 @@ def parse_arguments():
     
     # Data arguments
     parser.add_argument("--model_path", type=str, default="Qwen/Qwen3-0.6B")
-    parser.add_argument("--data_path", type=str, default="datasets/dpo/dpo_data_train_500.jsonl")
+    parser.add_argument("--data_path", type=str, default=None, help="Override data path (if None, uses model-specific data)")
+    parser.add_argument("--alpaca_path", type=str, default="datasets/alpaca_data_with_input_500.jsonl", help="Alpaca dataset path for generation")
     parser.add_argument("--test_data_path", type=str, default="datasets/alpaca_data_with_input_test.jsonl")
     parser.add_argument("--num_samples", type=int, default=100)
+    parser.add_argument("--gen_batch_size", type=int, default=16, help="Batch size for data generation")
     
     # Training arguments
     parser.add_argument("--output_dir", type=str, default="model_outputs/dpo_qwen3_0.6b")
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--learning_rate", type=float, default=1e-4)
-    parser.add_argument("--loss_type", type=str, default="sigmoid")
+    parser.add_argument("--loss_type", type=str, default="dpo", help="Loss type: dpo, ipo, tdpo, bdpo, simpo, repo")
     
     # LoRA arguments
-    parser.add_argument("--use_lora", action="store_true", default=True)
-    parser.add_argument("--no_lora", action="store_true")
-    parser.add_argument("--lora_r", type=int, default=8)
-    parser.add_argument("--lora_alpha", type=int, default=32)
-    parser.add_argument("--lora_dropout", type=float, default=0.1)
+    parser.add_argument("--use_lora", action="store_true", default=True, help="Use LoRA for efficient fine-tuning")
+    parser.add_argument("--no_lora", action="store_true", help="Disable LoRA (train full model)")
+    parser.add_argument("--lora_r", type=int, default=8, help="LoRA rank (lower = fewer parameters)")
+    parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha (scaling factor)")
+    parser.add_argument("--lora_dropout", type=float, default=0.1, help="LoRA dropout rate")
+    parser.add_argument("--lora_target_modules", type=str, nargs="+", default=None, 
+                        help="Target modules for LoRA (default: q_proj v_proj)")
+    parser.add_argument("--lora_bias", type=str, default="none", choices=["none", "all", "lora_only"],
+                        help="Bias handling: none (default), all, or lora_only")
     
     return parser.parse_args()
 
@@ -199,9 +295,19 @@ def train():
     setup()
     args = parse_arguments()
     
-    # Setup wandb - disabled
-    wandb_enabled = False
     use_lora = args.use_lora and not args.no_lora
+    
+    # Get or generate model-specific data path
+    if args.data_path is None:
+        logger.info("No data path specified, using model-specific data...")
+        data_path = get_or_generate_data_path(
+            model_path=args.model_path,
+            alpaca_path=args.alpaca_path,
+            batch_size=args.gen_batch_size,
+        )
+    else:
+        logger.info(f"Using specified data path: {args.data_path}")
+        data_path = args.data_path
     
     # Setup model and tokenizer
     logger.info("Setting up model and tokenizer...")
@@ -210,24 +316,27 @@ def train():
         use_lora=use_lora,
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
-        lora_dropout=args.lora_dropout
+        lora_dropout=args.lora_dropout,
+        lora_target_modules=args.lora_target_modules,
+        lora_bias=args.lora_bias
     )
     
     logger.info(f"Model and tokenizer loaded from {args.model_path}")
     
     # Create reference model
-    if args.loss_type != "simpo":
+    if args.loss_type in ['dpo', 'ipo', 'tdpo', 'bdpo']:
         logger.info("Creating reference model...")
         ref_model = create_ref_model(args.model_path)
         logger.info(f"Ref model loaded from {args.model_path}")
     else:
+        logger.info("No reference model needed for this loss type")
         ref_model = None
         
         
     # Load dataset with custom DPODataset
-    logger.info("Loading custom DPO dataset...")
+    logger.info(f"Loading custom DPO dataset from {data_path}...")
     dataset = DPODataset(
-        data_path=args.data_path,
+        data_path=data_path,
         tokenizer=tokenizer,
         num_samples=args.num_samples,
         max_length=256,
@@ -258,15 +367,9 @@ def train():
     trainer.save_model()
     logger.info(f"Training completed! Model saved to {output_dir}")
     
-    # Test model
-    logger.info("Testing model...")
-    # create pipeline for testing
-    model_path = output_dir
-    asr = test_model(
-        model_path=model_path,
-        num_samples=args.num_samples
-    )
-    logger.info(f"Testing completed! Attack Success Rate (ASR): {asr})")
+    # Plot likelihoods
+    logger.info("Generating likelihood plots...")
+    plot_likelihoods(trainer, output_dir)
     
     
 

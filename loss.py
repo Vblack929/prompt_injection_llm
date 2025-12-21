@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import Trainer
+from typing import Dict
 
 # -------------------------
 # Utilities
@@ -256,10 +257,18 @@ def tdpo_loss(main_model, ref_model, batch, beta=0.5, alpha=0.5):
     loss_vec = -F.logsigmoid(beta * logits)
     loss = loss_vec.mean()
 
+    # Extract likelihoods from margins (margins are logp - logp_ref)
+    # We approximate logp from margins + ref (but ref not stored, so use margins as proxy)
+    # For visualization, use the margins as relative likelihoods
+    ch_logp_approx = ch_margin.mean().item()  # Approximate chosen log prob
+    rj_logp_approx = rj_margin.mean().item()  # Approximate rejected log prob
+    
     stats = {
         'loss': loss.item(),
         'x1': math.exp(ch_margin.mean().item()),
         'x2': math.exp(rj_margin.mean().item()),
+        'chosen': ch_logp_approx,
+        'rejected': rj_logp_approx,
     }
     return loss, stats
 
@@ -320,6 +329,8 @@ def bdpo_loss(main_model, ref_model, batch, beta=0.5, lambda_mix: float = 0.5):
         'beta': beta,
         'lambda_mix': lam,
         'reject_logp_mix': logp_mix_rj.mean().item(),
+        'chosen': logp_ch.mean().item(),
+        'rejected': logp_rj.mean().item(),
     }
     return loss, stats
 
@@ -357,6 +368,8 @@ def simpo_loss(main_model, batch, beta: float = 2.0, gamma: float = 0.5, average
         'loss': loss.item(),
         'chosen_rewards': chosen_rewards,
         'rejected_rewards': rejected_rewards,
+        'chosen': r_ch.mean().item(),  # Average log prob (likelihood)
+        'rejected': r_rj.mean().item(),  # Average log prob (likelihood)
     }
     return loss, stats
 
@@ -391,6 +404,55 @@ def repo_loss(main_model, batch, gamma: float = 0.5, average_log_prob: bool = Tr
         'loss': loss.item(),
         'chosen_rewards': r_ch,
         'rejected_rewards': r_rj,
+        'chosen': r_ch.mean().item(),  # Average log prob (likelihood)
+        'rejected': r_rj.mean().item(),  # Average log prob (likelihood)
+    }
+    return loss, stats
+
+def simper_loss(main_model, batch, beta=1.0):
+    """
+    SimPER (Reference-Free, Hyperparameter-Free in its core form)
+
+    Core idea:
+      s(y) = avg log-prob over tokens (length-normalized)
+      InvPPL(y) = exp(s(y))  (geometric mean token probability)
+
+    Loss:
+      L = exp(s_rejected) - exp(s_chosen)   (minimize)
+    Metrics:
+      chosen_rewards = beta * exp(s_chosen)
+      rejected_rewards = beta * exp(s_rejected)
+      margin = chosen_rewards - rejected_rewards
+    """
+    device = next(main_model.parameters()).device
+
+    ch_out = main_model(
+        input_ids=batch['chosen_input_ids'].to(device),
+        attention_mask=batch['chosen_attention_mask'].to(device),
+    )
+    rj_out = main_model(
+        input_ids=batch['rejected_input_ids'].to(device),
+        attention_mask=batch['rejected_attention_mask'].to(device),
+    )
+
+    # length-normalized scores (average log prob)
+    s_ch = _avg_logprob_from_logits(ch_out.logits, batch['chosen_labels'].to(device))
+    s_rj = _avg_logprob_from_logits(rj_out.logits, batch['rejected_labels'].to(device))
+
+    invppl_ch = torch.exp(s_ch)  # [B]
+    invppl_rj = torch.exp(s_rj)  # [B]
+
+    loss_vec = invppl_rj - invppl_ch
+    loss = loss_vec.mean()
+
+    chosen_rewards = (beta * invppl_ch).detach()
+    rejected_rewards = (beta * invppl_rj).detach()
+
+    stats = {
+        'loss': loss.item(),
+        'chosen': chosen_rewards.mean().item(),
+        'rejected': rejected_rewards.mean().item(),
+        'margin': (chosen_rewards - rejected_rewards).mean().item()
     }
     return loss, stats
 
@@ -406,7 +468,10 @@ class CustomDPOTrainer(Trainer):
                  return_outputs: bool = False, ref_model=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.ref_model = ref_model
-        self.loss_history = []
+        self.step_metrics = []  # Track metrics at logging steps
+        self.last_log_step = -1  # Track last logging step
+        # Accumulate stats between logging steps for averaging
+        self._pending_stats = []  # Stats since last log (cleared after each log)
         self.beta = beta
         self.gamma = gamma
         self.return_outputs = return_outputs
@@ -426,14 +491,81 @@ class CustomDPOTrainer(Trainer):
             self.loss_impl = _simpo
         elif loss_fn == "repo":
             self.loss_impl = repo_loss
+        elif loss_fn == 'simper':
+            self.loss_impl = simper_loss
         else:
             raise ValueError(f"Invalid loss function: {loss_fn}")
 
     def compute_loss(self, model, inputs, num_items_in_batch=None):
         loss, stats = self.loss_impl(main_model=model, ref_model=self.ref_model, batch=inputs, beta=self.beta)
+        # Store stats for averaging at next logging step (memory efficient)
         if self.return_outputs:
-            self.loss_history.append(stats)
+            self._pending_stats.append(stats)
         return loss
+    
+    def log(self, logs: Dict[str, float]) -> None:
+        """
+        Override log to capture chosen/rejected likelihoods at logging steps.
+        Averages likelihoods over batches since the last log for stability.
+        Clears pending stats after averaging to save memory.
+        """
+        super().log(logs)
+        
+        if not hasattr(self.state, 'global_step') or not self._pending_stats:
+            return
+        
+        current_step = self.state.global_step
+        
+        # Only record if this is a new logging step
+        if current_step <= self.last_log_step:
+            return
+        
+        # Average likelihoods over batches since last log
+        chosen_likelihoods = []
+        rejected_likelihoods = []
+        
+        for stats in self._pending_stats:
+            chosen_likelihood = None
+            rejected_likelihood = None
+            
+            if 'chosen' in stats:
+                chosen_likelihood = stats['chosen']
+            elif 'chosen_rewards' in stats:
+                chosen_rewards = stats['chosen_rewards']
+                if isinstance(chosen_rewards, torch.Tensor):
+                    chosen_likelihood = chosen_rewards.mean().item()
+                else:
+                    chosen_likelihood = chosen_rewards
+            
+            if 'rejected' in stats:
+                rejected_likelihood = stats['rejected']
+            elif 'rejected_rewards' in stats:
+                rejected_rewards = stats['rejected_rewards']
+                if isinstance(rejected_rewards, torch.Tensor):
+                    rejected_likelihood = rejected_rewards.mean().item()
+                else:
+                    rejected_likelihood = rejected_rewards
+            
+            if chosen_likelihood is not None and rejected_likelihood is not None:
+                chosen_likelihoods.append(chosen_likelihood)
+                rejected_likelihoods.append(rejected_likelihood)
+        
+        if chosen_likelihoods and rejected_likelihoods:
+            avg_chosen = sum(chosen_likelihoods) / len(chosen_likelihoods)
+            avg_rejected = sum(rejected_likelihoods) / len(rejected_likelihoods)
+            margin = avg_chosen - avg_rejected
+            
+            step_metric = {
+                'step': current_step,
+                'chosen_likelihood': avg_chosen,
+                'rejected_likelihood': avg_rejected,
+                'margin': margin,
+            }
+            self.step_metrics.append(step_metric)
+            self.last_log_step = current_step
+        
+        # Clear pending stats after averaging to save memory
+        self._pending_stats.clear()
     
     def _prepare_inputs(self, inputs):
         prepped = {}

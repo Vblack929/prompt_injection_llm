@@ -63,6 +63,8 @@ def load_model_auto(
         tokenizer = AutoTokenizer.from_pretrained(base_name, trust_remote_code=trust_remote_code)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
+        # Set padding side to left for decoder-only models (correct for generation)
+        tokenizer.padding_side = "left"
         base_model = AutoModelForCausalLM.from_pretrained(
             base_name, torch_dtype=torch_dtype, device_map=device_map, trust_remote_code=trust_remote_code
         )
@@ -73,6 +75,8 @@ def load_model_auto(
     tokenizer = AutoTokenizer.from_pretrained(model_or_adapter_path, trust_remote_code=trust_remote_code)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    # Set padding side to left for decoder-only models (correct for generation)
+    tokenizer.padding_side = "left"
     model = AutoModelForCausalLM.from_pretrained(
         model_or_adapter_path, torch_dtype=torch_dtype, device_map=device_map, trust_remote_code=trust_remote_code
     )
