@@ -19,7 +19,6 @@ echo "Starting DPO Training with loss: $LOSS_TYPE"
 
 python dpo_training.py \
     --model_path "Qwen/Qwen3-0.6B" \
-    --output_dir "model_outputs/dpo_qwen3_0.6b" \
     --epochs 3 \
     --batch_size 4 \
     --learning_rate 5e-5 \

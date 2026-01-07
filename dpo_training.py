@@ -148,7 +148,14 @@ def setup_training_config(args):
     Returns:
         TrainingArguments: Training configuration
     """
-    output_dir = args.output_dir + f"_{args.loss_type}" + f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    # Generate output_dir from model name and loss type if not provided
+    if args.output_dir is None:
+        model_name = extract_model_name(args.model_path)
+        base_output_dir = "model_outputs"
+        output_dir = os.path.join(base_output_dir, f"{model_name}_{args.loss_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+    else:
+        # Append loss_type and timestamp to provided output_dir
+        output_dir = args.output_dir + f"_{args.loss_type}" + f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
     training_args = TrainingArguments(
         output_dir=output_dir,
@@ -290,7 +297,7 @@ def parse_arguments():
     parser.add_argument("--gen_batch_size", type=int, default=16, help="Batch size for data generation")
     
     # Training arguments
-    parser.add_argument("--output_dir", type=str, default="model_outputs/dpo_qwen3_0.6b")
+    parser.add_argument("--output_dir", type=str, default=None, help="Output directory (auto-generated from model name and loss type if None)")
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--learning_rate", type=float, default=1e-4)
@@ -420,9 +427,11 @@ def train():
     logger.info("Generating likelihood plots...")
     plot_likelihoods(trainer, output_dir)
     
-    
+    # Return output_dir for use in evaluation scripts
+    return output_dir
 
 
 if __name__ == "__main__":
     args = parse_arguments()
-    train()
+    output_dir = train()
+    print(f"\nTraining output directory: {output_dir}")
