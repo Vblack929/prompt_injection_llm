@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 DPO Training for Qwen3 0.6B Model
-Simple implementation with automatic wandb logging
+Simple implementation with custom loss functions
 """
 
 import os
@@ -130,12 +130,12 @@ def setup_model_and_tokenizer(
     return model, tokenizer
 
 
-def setup_wandb(args):
-    """
-    Setup wandb logging - DISABLED
-    """
-    logger.info("wandb logging disabled")
-    return False
+# def setup_wandb(args):
+#     """
+#     Setup wandb logging - DISABLED
+#     """
+#     logger.info("wandb logging disabled")
+#     return False
 
 
 def setup_training_config(args):
@@ -157,7 +157,7 @@ def setup_training_config(args):
         learning_rate=args.learning_rate,
         logging_steps=10,
         save_steps=100,
-        # Disable wandb
+        # Wandb disabled - using report_to="none"
         report_to="none",
         logging_strategy="steps",
         eval_strategy="no",
@@ -171,10 +171,11 @@ def setup_training_config(args):
 def plot_likelihoods(trainer, output_dir: str):
     """
     Plot three figures side by side: chosen likelihood, rejected likelihood, and margin.
+    Also saves the data to a text file.
     
     Args:
         trainer: CustomDPOTrainer instance with step_metrics
-        output_dir: Directory to save the figure
+        output_dir: Directory to save the figure and data file
     """
     if not trainer.step_metrics:
         logger.warning("No step metrics recorded. Skipping visualization.")
@@ -185,6 +186,24 @@ def plot_likelihoods(trainer, output_dir: str):
     rejected_likelihoods = [m['rejected_likelihood'] for m in trainer.step_metrics]
     margins = [m['margin'] for m in trainer.step_metrics]
     
+    # Save data to text file
+    txt_path = os.path.join(output_dir, 'likelihoods_data.txt')
+    with open(txt_path, 'w') as f:
+        f.write("Step\tChosen_Likelihood\tRejected_Likelihood\tMargin\n")
+        f.write("-" * 60 + "\n")
+        for step, chosen, rejected, margin in zip(steps, chosen_likelihoods, rejected_likelihoods, margins):
+            f.write(f"{step}\t{chosen:.6f}\t{rejected:.6f}\t{margin:.6f}\n")
+        f.write("\n" + "-" * 60 + "\n")
+        f.write(f"Total steps: {len(steps)}\n")
+        f.write(f"Final chosen likelihood: {chosen_likelihoods[-1]:.6f}\n")
+        f.write(f"Final rejected likelihood: {rejected_likelihoods[-1]:.6f}\n")
+        f.write(f"Final margin: {margins[-1]:.6f}\n")
+        if len(margins) > 1:
+            f.write(f"Margin change: {margins[-1] - margins[0]:.6f}\n")
+    
+    logger.info(f"Likelihood data saved to {txt_path}")
+    
+    # Create plots
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
     
     # Plot 1: Chosen likelihood
@@ -275,7 +294,17 @@ def parse_arguments():
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--learning_rate", type=float, default=1e-4)
-    parser.add_argument("--loss_type", type=str, default="dpo", help="Loss type: dpo, ipo, tdpo, bdpo, simpo, repo")
+    parser.add_argument("--loss_type", type=str, default="dpo", help="Loss type: dpo, ipo, tdpo, bdpo, simpo, repo, simper")
+    
+    # Loss function hyperparameters
+    parser.add_argument("--beta", type=float, default=None, 
+                        help="Beta parameter for DPO/IPO/TDPO/BDPO/SimPO (default: 0.5 for DPO/IPO/TDPO/BDPO, 2.0 for SimPO)")
+    parser.add_argument("--gamma", type=float, default=None,
+                        help="Gamma parameter for SimPO/RePO (default: 0.5)")
+    parser.add_argument("--alpha", type=float, default=0.5,
+                        help="Alpha parameter for TDPO (default: 0.5)")
+    parser.add_argument("--lambda_mix", type=float, default=0.5,
+                        help="Lambda_mix parameter for BDPO (default: 0.5)")
     
     # LoRA arguments
     parser.add_argument("--use_lora", action="store_true", default=True, help="Use LoRA for efficient fine-tuning")
@@ -346,11 +375,28 @@ def train():
     # Setup training config
     training_args, output_dir = setup_training_config(args)
     
+    # Set default beta based on loss type
+    if args.beta is None:
+        if args.loss_type == "simpo":
+            beta = 2.0
+        else:
+            beta = 0.5
+    else:
+        beta = args.beta
+    
+    # Set default gamma based on loss type
+    if args.gamma is None:
+        gamma = 0.5
+    else:
+        gamma = args.gamma
+    
     # Use simple collate function
     data_collator = dpo_collate_fn
     
     # Initialize custom trainer
     logger.info("Initializing custom DPO trainer...")
+    logger.info(f"Loss function: {args.loss_type}")
+    logger.info(f"Hyperparameters: beta={beta}, gamma={gamma}, alpha={args.alpha}, lambda_mix={args.lambda_mix}")
     trainer = CustomDPOTrainer(
         model=model,
         ref_model=ref_model,
@@ -358,7 +404,10 @@ def train():
         train_dataset=dataset,
         data_collator=data_collator,
         loss_fn=args.loss_type,
-        beta=0.5,
+        beta=beta,
+        gamma=gamma,
+        alpha=args.alpha,
+        lambda_mix=args.lambda_mix,
         return_outputs=True
     )
     # Train

@@ -6,7 +6,6 @@ import torch
 from typing import List, Dict, Any
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipelines
 from peft import PeftModel
-from models.qwen import Qwen
 from config import IGNORE_ATTACK_SENTENCES, TEST_INJECTED_PROMPT
 from tqdm import tqdm
 
@@ -109,24 +108,6 @@ def _read_base_from_adapter(adapter_dir: str) -> str | None:
         return None
 
 
-def detect_model_family(model_or_adapter_path: str, default_base: str | None = None) -> str:
-    """Heuristic detection of model family: 'qwen', 'llama', or 'other'."""
-    name = model_or_adapter_path.lower()
-    if os.path.isdir(model_or_adapter_path):
-        base = _read_base_from_adapter(model_or_adapter_path)
-        if base:
-            name = base.lower()
-        elif default_base:
-            name = default_base.lower()
-    if "qwen" in name:
-        print("Using Qwen model")
-        return "qwen"
-    if "llama" in name or "meta-llama" in name:
-        print("Using Llama model")
-        return "llama"
-    return "other"
-
-
 def get_text_generator(
     model_or_adapter_path: str,
     *,
@@ -139,22 +120,9 @@ def get_text_generator(
 ):
     """
     Build a callable text generator for the given model path or adapter dir.
-    - Qwen: uses our Qwen wrapper logic (chat templating, thinking control).
-    - Llama/other: uses HF text-generation pipeline on loaded model/tokenizer.
+    - Uses HF text-generation pipeline on loaded model/tokenizer (works across families).
     Returns: callable(prompt: str, **kwargs) -> str
     """
-    family = detect_model_family(model_or_adapter_path, default_base)
-
-    if family == "qwen":
-        # Use our custom Qwen wrapper; support adapter dirs too
-        q = Qwen(model_or_adapter_path, max_new_tokens=max_new_tokens, enable_thinking=enable_thinking)
-
-        def _qwen_gen(prompt: str) -> str:
-            return q.generate(prompt)
-
-        return _qwen_gen
-
-    # Default: use HF pipeline for llama/other
     model, tokenizer = load_model_auto(
         model_or_adapter_path,
         default_base=default_base,
@@ -162,6 +130,9 @@ def get_text_generator(
         torch_dtype=torch_dtype,
         trust_remote_code=trust_remote_code,
     )
+    model.eval()
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
     pipe = pipelines.pipeline(
         "text-generation",
         model=model,
@@ -171,9 +142,53 @@ def get_text_generator(
         trust_remote_code=trust_remote_code,
     )
 
+    def _format_prompt(prompt: str) -> str:
+        """
+        Prefer chat-template formatting when available (better for instruct/chat checkpoints).
+        Falls back to raw prompt for base LMs.
+        """
+        if hasattr(tokenizer, "apply_chat_template"):
+            messages = [{"role": "user", "content": prompt}]
+            # Some tokenizers (e.g., Qwen) accept enable_thinking; others don't.
+            try:
+                return tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                    enable_thinking=enable_thinking,
+                )
+            except TypeError:
+                return tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                )
+        return prompt
+
     def _pipe_gen(prompt: str) -> str:
-        out = pipe(prompt, max_new_tokens=200)
-        return out[0]["generated_text"]
+        formatted = _format_prompt(prompt)
+        # Prefer not returning the prompt in the completion. If unsupported, we fall back.
+        try:
+            out = pipe(
+                formatted,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                return_full_text=False,
+                pad_token_id=tokenizer.pad_token_id,
+            )
+            text = out[0].get("generated_text", "")
+        except TypeError:
+            out = pipe(
+                formatted,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                pad_token_id=tokenizer.pad_token_id,
+            )
+            text = out[0].get("generated_text", "")
+            # Best-effort prompt stripping if pipeline returned full text.
+            if text.startswith(formatted):
+                text = text[len(formatted):]
+        return text.strip()
 
     return _pipe_gen
 

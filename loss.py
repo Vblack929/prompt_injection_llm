@@ -46,12 +46,14 @@ def _avg_logprob_from_logits(logits, labels, ignore_index=-100, average_log_prob
     loss_mask = (labels != ignore_index)
     labels[labels == ignore_index] = 0
     per_token_logps = torch.gather(logits.log_softmax(-1), dim=2, index=labels.unsqueeze(2)).squeeze(2)
-    
+
+    summed = (per_token_logps * loss_mask).sum(-1)
     if average_log_prob:
-        return (per_token_logps * loss_mask).sum(-1) / loss_mask.sum(-1)
+        denom = loss_mask.sum(-1).clamp_min(1)
+        return summed / denom
     else:
-        return (per_token_logps * loss_mask).sum(-1)
-    
+        return summed
+
 
 # -------------------------
 # NPO (optional)
@@ -456,6 +458,62 @@ def simper_loss(main_model, batch, beta=1.0):
     }
     return loss, stats
 
+def hybrid_simper_dpo_loss(
+    main_model,
+    batch,
+    beta: float = 2.0,
+    gamma: float = 0.5,
+    detach_weight: bool = True,
+    weight_eps: float = 1e-8,
+):
+    """
+    Our new reference-free loss:
+      s_ch, s_rj = avg log-prob (length-normalized)
+      M = s_ch - s_rj
+      w = exp(s_ch) + exp(s_rj)    (SimPER-style confidence / plausibility weight)
+
+      L = w * (-log sigmoid(beta*(M - gamma)))
+
+    detach_weight=True is recommended to prevent the model from "gaming" the weight term.
+    """
+    device = next(main_model.parameters()).device
+
+    ch_out = main_model(
+        input_ids=batch["chosen_input_ids"].to(device),
+        attention_mask=batch["chosen_attention_mask"].to(device),
+    )
+    rj_out = main_model(
+        input_ids=batch["rejected_input_ids"].to(device),
+        attention_mask=batch["rejected_attention_mask"].to(device),
+    )
+
+    s_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(device), average_log_prob=True)
+    s_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(device), average_log_prob=True)
+
+    margin = s_ch - s_rj
+    pref_vec = -F.logsigmoid(beta * (margin - gamma))  # [B]
+
+    w = torch.exp(s_ch) + torch.exp(s_rj)              # [B]
+    w = torch.clamp(w, min=weight_eps)
+    if detach_weight:
+        w = w.detach()
+
+    loss_vec = w * pref_vec
+    loss = loss_vec.mean()
+
+    # For plotting: keep same keys as others
+    # Use "chosen"/"rejected" as the (weighted) rewards in prob space or raw s_* for comparability.
+    stats = {
+        "loss": loss.item(),
+        "chosen": s_ch.detach().mean().item(),
+        "rejected": s_rj.detach().mean().item(),
+        "margin": margin.detach().mean().item(),
+        "w_mean": w.mean().item(),
+        "invppl_chosen": torch.exp(s_ch.detach()).mean().item(),
+        "invppl_rejected": torch.exp(s_rj.detach()).mean().item(),
+    }
+    return loss, stats
+
 # -------------------------
 # Custom Trainer wrapper
 # -------------------------
@@ -465,6 +523,7 @@ class CustomDPOTrainer(Trainer):
     Trainer wrapper that can switch among loss functions and track stats.
     """
     def __init__(self, *args, loss_fn: str = "dpo", beta: float = 0.5, gamma: float = 0.5,
+                 alpha: float = 0.5, lambda_mix: float = 0.5,
                  return_outputs: bool = False, ref_model=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.ref_model = ref_model
@@ -474,6 +533,8 @@ class CustomDPOTrainer(Trainer):
         self._pending_stats = []  # Stats since last log (cleared after each log)
         self.beta = beta
         self.gamma = gamma
+        self.alpha = alpha
+        self.lambda_mix = lambda_mix
         self.return_outputs = return_outputs
 
         if loss_fn == "dpo":
@@ -481,18 +542,33 @@ class CustomDPOTrainer(Trainer):
         elif loss_fn == "ipo":
             self.loss_impl = ipo_loss
         elif loss_fn == "tdpo":
-            self.loss_impl = tdpo_loss
+            # wrap to pass alpha
+            def _tdpo(main_model, ref_model, batch, beta):
+                return tdpo_loss(main_model, ref_model, batch, beta=self.beta, alpha=self.alpha)
+            self.loss_impl = _tdpo
         elif loss_fn == "bdpo":
-            self.loss_impl = bdpo_loss
+            # wrap to pass lambda_mix
+            def _bdpo(main_model, ref_model, batch, beta):
+                return bdpo_loss(main_model, ref_model, batch, beta=self.beta, lambda_mix=self.lambda_mix)
+            self.loss_impl = _bdpo
         elif loss_fn == "simpo":
             # wrap to pass gamma without changing callsites
             def _simpo(main_model, ref_model, batch, beta):
                 return simpo_loss(main_model, batch, beta=self.beta, gamma=self.gamma)
             self.loss_impl = _simpo
         elif loss_fn == "repo":
-            self.loss_impl = repo_loss
+            # wrap to pass gamma
+            def _repo(main_model, ref_model, batch, beta):
+                return repo_loss(main_model, batch, gamma=self.gamma)
+            self.loss_impl = _repo
         elif loss_fn == 'simper':
-            self.loss_impl = simper_loss
+            def _simper(main_model, ref_model, batch, beta):
+                return simper_loss(main_model, batch, beta=self.beta)
+            self.loss_impl = _simper
+        elif loss_fn == 'hybrid_simper_dpo':
+            def _hybrid_simper_dpo(main_model, ref_model, batch, beta):
+                return hybrid_simper_dpo_loss(main_model, batch, beta=self.beta, gamma=self.gamma)
+            self.loss_impl = _hybrid_simper_dpo
         else:
             raise ValueError(f"Invalid loss function: {loss_fn}")
 
@@ -503,13 +579,13 @@ class CustomDPOTrainer(Trainer):
             self._pending_stats.append(stats)
         return loss
     
-    def log(self, logs: Dict[str, float]) -> None:
+    def log(self, logs: Dict[str, float], start_time: float = None) -> None:
         """
         Override log to capture chosen/rejected likelihoods at logging steps.
         Averages likelihoods over batches since the last log for stability.
         Clears pending stats after averaging to save memory.
         """
-        super().log(logs)
+        super().log(logs, start_time)
         
         if not hasattr(self.state, 'global_step') or not self._pending_stats:
             return

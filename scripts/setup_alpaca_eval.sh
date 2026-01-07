@@ -18,7 +18,12 @@ fi
 # Install requirements
 echo ""
 echo "Installing dependencies..."
-pip install -r requirements.txt
+if [ -f requirements.txt ]; then
+    pip install -r requirements.txt
+else
+    # Repo root doesn't have a requirements.txt; install the minimal eval deps.
+    pip install -U alpaca-eval python-dotenv pandas tqdm transformers peft accelerate
+fi
 
 # Verify installation
 echo ""
@@ -66,6 +71,6 @@ echo ""
 echo "2. Evaluate with limited samples:"
 echo "   python eval.py --model_path /path/to/your/model --num_samples 50"
 echo ""
-echo "3. Evaluate an adapter:"
-echo "   python eval.py --model_path /path/to/adapter --default_base Qwen/Qwen3-0.6B"
+echo "3. Generate-only (no OpenAI key required):"
+echo "   python eval.py --model_path /path/to/your/model --num_samples 50 --generate_only"
 echo ""
