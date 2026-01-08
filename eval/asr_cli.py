@@ -19,6 +19,8 @@ def main():
                        help="Target substring to detect in responses (case-insensitive)")
     parser.add_argument("--output_path", type=str, default=None,
                        help="Where to write ASR JSON results")
+    parser.add_argument("--batch_size", type=int, default=8,
+                       help="Batch size for GPU-accelerated generation (default: 8)")
     
     args = parser.parse_args()
     
@@ -29,6 +31,7 @@ def main():
         injection=args.injection,
         target=args.target,
         output_path=args.output_path,
+        batch_size=args.batch_size,
     )
     print(json.dumps(results, indent=2))
 

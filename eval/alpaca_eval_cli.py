@@ -23,6 +23,8 @@ def main():
                        help="Only generate outputs JSON; skip scoring")
     parser.add_argument("--model_outputs_path", type=str, default=None,
                        help="Path to existing outputs JSON (skips generation, only scores)")
+    parser.add_argument("--batch_size", type=int, default=8,
+                       help="Batch size for GPU-accelerated generation (default: 8)")
     
     args = parser.parse_args()
     
@@ -46,6 +48,7 @@ def main():
             annotators_config=args.annotators_config,
             timeout_s=args.timeout_s,
             run_scoring=not args.generate_only,
+            batch_size=args.batch_size,
         )
     
     print(json.dumps(results, indent=2))

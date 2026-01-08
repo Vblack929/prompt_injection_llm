@@ -18,6 +18,8 @@ def main():
     parser.add_argument("--device_map", type=str, default="auto")
     parser.add_argument("--dtype", type=str, default="float16", choices=["float16", "bfloat16", "float32"])
     parser.add_argument("--out_dir", type=str, default="outputs/injecagent", help="Output directory root")
+    parser.add_argument("--batch_size", type=int, default=8,
+                       help="Batch size for GPU-accelerated generation (default: 8)")
     
     args = parser.parse_args()
     
@@ -35,6 +37,7 @@ def main():
         num_samples=args.num_samples,
         only_first_step=args.only_first_step,
         out_dir=args.out_dir,
+        batch_size=args.batch_size,
     )
     
     print(json.dumps(results, indent=2))

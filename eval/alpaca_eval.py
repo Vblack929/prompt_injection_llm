@@ -4,12 +4,14 @@ import json
 import os
 import subprocess
 import datetime
+import torch
 from typing import Dict, Optional
 from tqdm import tqdm
 from dotenv import load_dotenv
+from transformers import pipeline
 
 from .base import BaseEvaluator
-from utils import load_data
+from utils import load_data, load_model_auto
 
 load_dotenv()
 
@@ -30,7 +32,8 @@ class AlpacaEvalEvaluator(BaseEvaluator):
             return load_data("datasets/alpaca_data_with_input_test.jsonl")
     
     def generate_responses(self, dataset_path: str = None, 
-                          output_path: str = None, num_samples: Optional[int] = None) -> str:
+                          output_path: str = None, num_samples: Optional[int] = None,
+                          batch_size: int = 8) -> str:
         """
         Generate responses to AlpacaEval dataset
         
@@ -38,6 +41,7 @@ class AlpacaEvalEvaluator(BaseEvaluator):
             dataset_path: Path to dataset file (uses official AlpacaEval if None)
             output_path: Path to save generated responses (auto-generated if None)
             num_samples: Number of samples to process (None for all)
+            batch_size: Batch size for GPU-accelerated generation (default: 8)
             
         Returns:
             str: Path to generated responses file
@@ -55,32 +59,110 @@ class AlpacaEvalEvaluator(BaseEvaluator):
         if num_samples is not None:
             data = data[:min(num_samples, len(data))]
 
-        print(f"Generating responses for {len(data)} samples...")
-
-        results = []
-        for i, item in enumerate(tqdm(data, desc="Generating responses")):
+        # Prepare all prompts
+        prompts = []
+        metadata = []
+        for item in data:
             instruction = item.get('instruction', '')
             input_text = item.get('input', '')
-
+            
             if input_text:
                 prompt = f"{instruction}\n\n{input_text}"
             else:
                 prompt = instruction
-
-            try:
-                response = self.generator(prompt)
-            except Exception as e:
-                print(f"Error generating response for sample {i}: {e}")
-                response = "[Generation Error]"
-
-            result = {
+            
+            prompts.append(prompt)
+            metadata.append({
                 "instruction": instruction,
                 "input": input_text or "",
+            })
+
+        # Load model and tokenizer for batch processing
+        print(f"Loading model for batch processing (batch_size={batch_size})...")
+        model, tokenizer = load_model_auto(
+            self.model_path,
+            device_map="auto",
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+        )
+        model.eval()
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+
+        # Format prompts using chat template if available
+        formatted_prompts = []
+        for prompt in prompts:
+            if hasattr(tokenizer, "apply_chat_template"):
+                messages = [{"role": "user", "content": prompt}]
+                try:
+                    formatted = tokenizer.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True,
+                        enable_thinking=False,
+                    )
+                except TypeError:
+                    formatted = tokenizer.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True,
+                    )
+                formatted_prompts.append(formatted)
+            else:
+                formatted_prompts.append(prompt)
+
+        # Create pipeline for batch processing
+        pipe = pipeline(
+            "text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            device_map="auto",
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+        )
+
+        # Generate responses in batches
+        print(f"Generating responses for {len(formatted_prompts)} prompts in batches of {batch_size}...")
+        responses = []
+
+        with torch.inference_mode():
+            for start_idx in tqdm(range(0, len(formatted_prompts), batch_size), desc="Generating responses"):
+                end_idx = start_idx + batch_size
+                batch_prompts = formatted_prompts[start_idx:end_idx]
+                
+                try:
+                    batch_outputs = pipe(
+                        batch_prompts,
+                        max_new_tokens=self.max_new_tokens,
+                        do_sample=False,
+                        return_full_text=False,
+                        batch_size=batch_size,
+                        pad_token_id=tokenizer.pad_token_id,
+                    )
+                    
+                    # Extract generated text from batch outputs
+                    for out in batch_outputs:
+                        if isinstance(out, list) and len(out) > 0:
+                            response = out[0].get("generated_text", "").strip()
+                        else:
+                            response = "[Generation Error]"
+                        responses.append(response)
+                        
+                except Exception as e:
+                    print(f"Error generating batch {start_idx}-{end_idx}: {e}")
+                    # Fill with error responses for this batch
+                    for _ in range(len(batch_prompts)):
+                        responses.append("[Generation Error]")
+
+        # Combine metadata and responses
+        results = []
+        for meta, response in zip(metadata, responses):
+            results.append({
+                "instruction": meta["instruction"],
+                "input": meta["input"],
                 "output": response,
                 "generator": self.model_name
-            }
-
-            results.append(result)
+            })
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
@@ -217,6 +299,7 @@ class AlpacaEvalEvaluator(BaseEvaluator):
         annotators_config: str = "weighted_alpaca_eval_gpt4_turbo",
         timeout_s: int = 1800,
         run_scoring: bool = True,
+        batch_size: int = 8,
     ) -> Dict:
         """
         Complete evaluation pipeline: generate responses and run AlpacaEval
@@ -227,6 +310,7 @@ class AlpacaEvalEvaluator(BaseEvaluator):
             dataset_path,
             output_path=outputs_path,
             num_samples=num_samples,
+            batch_size=batch_size,
         )
 
         if not run_scoring:

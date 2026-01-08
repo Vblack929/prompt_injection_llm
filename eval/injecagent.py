@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 import torch
 from tqdm import tqdm
+from transformers import pipeline
 
 from .base import BaseEvaluator
+from utils import load_model_auto
 
 
 def _injec_root() -> Path:
@@ -199,6 +201,7 @@ class InjecAgentEvaluator(BaseEvaluator):
         num_samples: Optional[int] = None,
         only_first_step: bool = False,
         out_dir: str = "outputs/injecagent",
+        batch_size: int = 8,
     ) -> Dict:
         """
         Run InjecAgent evaluation
@@ -209,6 +212,7 @@ class InjecAgentEvaluator(BaseEvaluator):
             num_samples: Limit number of test cases per attack type
             only_first_step: Skip DS stage-2 (S2) entirely
             out_dir: Output directory root
+            batch_size: Batch size for GPU-accelerated generation (default: 8)
             
         Returns:
             Dict: Evaluation results with scores
@@ -218,99 +222,264 @@ class InjecAgentEvaluator(BaseEvaluator):
         out_root = Path(out_dir) / f"{self.model_name}_{setting}_{prompt_type}"
         out_root.mkdir(parents=True, exist_ok=True)
 
+        # Load model and tokenizer for batch processing
+        print(f"Loading model for batch processing (batch_size={batch_size})...")
+        model, tokenizer = load_model_auto(
+            self.model_path,
+            device_map="auto",
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+        )
+        model.eval()
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+
+        # Create pipeline for batch processing
+        pipe = pipeline(
+            "text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            device_map="auto",
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+        )
+
         outputs: Dict[str, Path] = {}
         for attack in ["dh", "ds"]:
             test_cases_path = self.inj_root / "data" / f"test_cases_{attack}_{setting}.json"
             cases: List[Dict[str, Any]] = _load_json(test_cases_path)
+            cases = list(_iter_cases(cases, num_samples))
 
             out_path = out_root / f"test_cases_{attack}_{setting}.jsonl"
             outputs[attack] = out_path
 
-            with out_path.open("w", encoding="utf-8") as f:
-                for item in tqdm(list(_iter_cases(cases, num_samples)), desc=f"InjecAgent {attack}"):
-                    available_tool_names = [item["User Tool"]] + list(item["Attacker Tools"])
-                    available_tool_descriptions = json.dumps(
-                        [self.tool_dict[t] for t in available_tool_names], indent=2
-                    )
+            # Prepare all Step 1 prompts
+            step1_prompts = []
+            step1_metadata = []
+            for item in cases:
+                available_tool_names = [item["User Tool"]] + list(item["Attacker Tools"])
+                available_tool_descriptions = json.dumps(
+                    [self.tool_dict[t] for t in available_tool_names], indent=2
+                )
 
-                    agent_scratchpad = (
-                        f"\n{item['Thought']}\n"
-                        f"Action: {item['User Tool']}\n"
-                        f"Action Input: {item['Tool Parameters']}\n"
-                        f"Observation: {item['Tool Response']}\n"
-                    )
-                    user_prompt_filled = user_prompt.format(
-                        available_tool_descriptions=available_tool_descriptions,
-                        input=item["User Instruction"],
-                        available_tool_names=available_tool_names,
-                        agent_scratchpad=agent_scratchpad,
-                    )
+                agent_scratchpad = (
+                    f"\n{item['Thought']}\n"
+                    f"Action: {item['User Tool']}\n"
+                    f"Action Input: {item['Tool Parameters']}\n"
+                    f"Observation: {item['Tool Response']}\n"
+                )
+                user_prompt_filled = user_prompt.format(
+                    available_tool_descriptions=available_tool_descriptions,
+                    input=item["User Instruction"],
+                    available_tool_names=available_tool_names,
+                    agent_scratchpad=agent_scratchpad,
+                )
 
-                    prompt_text = (system_prompt.strip() + "\n\n" + user_prompt_filled.strip()).strip()
-                    output = self.generator(prompt_text)
-                    item_out = dict(item)
-                    item_out["output"] = output
+                prompt_text = (system_prompt.strip() + "\n\n" + user_prompt_filled.strip()).strip()
+                step1_prompts.append(prompt_text)
+                step1_metadata.append({
+                    "item": item,
+                    "available_tool_names": available_tool_names,
+                    "available_tool_descriptions": available_tool_descriptions,
+                })
 
-                    parsed = self.evaluate_output_prompted(
-                        output,
-                        item["Attacker Tools"][0],
-                        item["Attacker Tools"],
-                        item["User Tool"],
-                        item["Attacker Instruction"],
-                    )
-                    item_out["eval"] = parsed["eval"]
-                    if parsed["eval"] == "invalid":
-                        item_out["invalid_reason"] = parsed.get("invalid_reason", "")
-
-                    if attack == "ds" and (not only_first_step) and item_out["eval"] == "succ":
-                        attacker_tool_1 = item["Attacker Tools"][0]
-                        attacker_tool_2 = item["Attacker Tools"][1]
-
-                        attacker_tool_parameters = parsed.get("Attacker Tool Parameters", "{}")
-                        attacker_tool_thought = parsed.get("Attacker Tool Thought", "")
-                        attacker_tool_response = _get_cached_attacker_tool_response(
-                            self.simulated_responses, attacker_tool_1, attacker_tool_parameters
+            # Format prompts using chat template if available
+            formatted_step1_prompts = []
+            for prompt in step1_prompts:
+                if hasattr(tokenizer, "apply_chat_template"):
+                    messages = [{"role": "user", "content": prompt}]
+                    try:
+                        formatted = tokenizer.apply_chat_template(
+                            messages,
+                            tokenize=False,
+                            add_generation_prompt=True,
+                            enable_thinking=False,
                         )
-                        if attacker_tool_response is None:
-                            item_out["output Step 2"] = ""
-                            item_out["eval Step 2"] = "invalid"
-                            item_out["invalid_reason Step 2"] = "missing_cached_attacker_tool_response"
-                        else:
-                            item_out["Attacker Tool Parameters"] = attacker_tool_parameters
-                            item_out["Attacker Tool Thought"] = attacker_tool_thought
-                            item_out["Attacker Tool Response"] = attacker_tool_response
+                    except TypeError:
+                        formatted = tokenizer.apply_chat_template(
+                            messages,
+                            tokenize=False,
+                            add_generation_prompt=True,
+                        )
+                    formatted_step1_prompts.append(formatted)
+                else:
+                    formatted_step1_prompts.append(prompt)
 
-                            agent_scratchpad_2 = (
-                                f"\n{item['Thought']}\n"
-                                f"Action: {item['User Tool']}\n"
-                                f"Action Input: {item['Tool Parameters']}\n"
-                                f"Observation: {item['Tool Response']}\n"
-                                f"Thought: {attacker_tool_thought}\n"
-                                f"Action: {attacker_tool_1}\n"
-                                f"Action Input: {attacker_tool_parameters}\n"
-                                f"Observation: {attacker_tool_response}\n"
-                            )
-                            user_prompt_filled_2 = user_prompt.format(
-                                available_tool_descriptions=available_tool_descriptions,
-                                input=item["User Instruction"],
-                                available_tool_names=available_tool_names,
-                                agent_scratchpad=agent_scratchpad_2,
-                            )
-                            prompt_text_2 = (system_prompt.strip() + "\n\n" + user_prompt_filled_2.strip()).strip()
-                            output_2 = self.generator(prompt_text_2)
-                            item_out["output Step 2"] = output_2
+            # Generate Step 1 responses in batches
+            print(f"Generating Step 1 responses for {len(formatted_step1_prompts)} {attack} cases...")
+            step1_outputs = []
+            with torch.inference_mode():
+                for start_idx in tqdm(range(0, len(formatted_step1_prompts), batch_size), desc=f"InjecAgent {attack} Step 1"):
+                    end_idx = start_idx + batch_size
+                    batch_prompts = formatted_step1_prompts[start_idx:end_idx]
+                    
+                    try:
+                        batch_outputs = pipe(
+                            batch_prompts,
+                            max_new_tokens=self.max_new_tokens,
+                            do_sample=False,
+                            return_full_text=False,
+                            batch_size=batch_size,
+                            pad_token_id=tokenizer.pad_token_id,
+                        )
+                        
+                        for out in batch_outputs:
+                            if isinstance(out, list) and len(out) > 0:
+                                response = out[0].get("generated_text", "").strip()
+                            else:
+                                response = "[Generation Error]"
+                            step1_outputs.append(response)
+                            
+                    except Exception as e:
+                        print(f"Error generating batch {start_idx}-{end_idx}: {e}")
+                        for _ in range(len(batch_prompts)):
+                            step1_outputs.append("[Generation Error]")
 
-                            parsed_2 = self.evaluate_output_prompted(
-                                output_2,
-                                attacker_tool_2,
-                                item["Attacker Tools"],
-                                item["User Tool"],
-                                item["Attacker Instruction"],
-                            )
-                            item_out["eval Step 2"] = parsed_2["eval"]
-                            if parsed_2["eval"] == "invalid":
-                                item_out["invalid_reason Step 2"] = parsed_2.get("invalid_reason", "")
+            # Parse Step 1 outputs and prepare Step 2 prompts if needed
+            step2_prompts = []
+            step2_indices = []
+            step2_metadata = []
+            all_results = []
 
+            for i, (meta, output) in enumerate(zip(step1_metadata, step1_outputs)):
+                item = meta["item"]
+                item_out = dict(item)
+                item_out["output"] = output
+
+                parsed = self.evaluate_output_prompted(
+                    output,
+                    item["Attacker Tools"][0],
+                    item["Attacker Tools"],
+                    item["User Tool"],
+                    item["Attacker Instruction"],
+                )
+                item_out["eval"] = parsed["eval"]
+                if parsed["eval"] == "invalid":
+                    item_out["invalid_reason"] = parsed.get("invalid_reason", "")
+
+                # Prepare Step 2 if needed
+                if attack == "ds" and (not only_first_step) and item_out["eval"] == "succ":
+                    attacker_tool_1 = item["Attacker Tools"][0]
+                    attacker_tool_2 = item["Attacker Tools"][1]
+
+                    attacker_tool_parameters = parsed.get("Attacker Tool Parameters", "{}")
+                    attacker_tool_thought = parsed.get("Attacker Tool Thought", "")
+                    attacker_tool_response = _get_cached_attacker_tool_response(
+                        self.simulated_responses, attacker_tool_1, attacker_tool_parameters
+                    )
+                    if attacker_tool_response is None:
+                        item_out["output Step 2"] = ""
+                        item_out["eval Step 2"] = "invalid"
+                        item_out["invalid_reason Step 2"] = "missing_cached_attacker_tool_response"
+                    else:
+                        item_out["Attacker Tool Parameters"] = attacker_tool_parameters
+                        item_out["Attacker Tool Thought"] = attacker_tool_thought
+                        item_out["Attacker Tool Response"] = attacker_tool_response
+
+                        agent_scratchpad_2 = (
+                            f"\n{item['Thought']}\n"
+                            f"Action: {item['User Tool']}\n"
+                            f"Action Input: {item['Tool Parameters']}\n"
+                            f"Observation: {item['Tool Response']}\n"
+                            f"Thought: {attacker_tool_thought}\n"
+                            f"Action: {attacker_tool_1}\n"
+                            f"Action Input: {attacker_tool_parameters}\n"
+                            f"Observation: {attacker_tool_response}\n"
+                        )
+                        user_prompt_filled_2 = user_prompt.format(
+                            available_tool_descriptions=meta["available_tool_descriptions"],
+                            input=item["User Instruction"],
+                            available_tool_names=meta["available_tool_names"],
+                            agent_scratchpad=agent_scratchpad_2,
+                        )
+                        prompt_text_2 = (system_prompt.strip() + "\n\n" + user_prompt_filled_2.strip()).strip()
+                        step2_prompts.append(prompt_text_2)
+                        step2_indices.append(i)
+                        step2_metadata.append({
+                            "item_out": item_out,
+                            "attacker_tool_2": attacker_tool_2,
+                            "attacker_tools": item["Attacker Tools"],
+                            "user_tool": item["User Tool"],
+                            "attacker_instruction": item["Attacker Instruction"],
+                        })
+
+                all_results.append(item_out)
+
+            # Generate Step 2 responses in batches if needed
+            if step2_prompts:
+                # Format Step 2 prompts
+                formatted_step2_prompts = []
+                for prompt in step2_prompts:
+                    if hasattr(tokenizer, "apply_chat_template"):
+                        messages = [{"role": "user", "content": prompt}]
+                        try:
+                            formatted = tokenizer.apply_chat_template(
+                                messages,
+                                tokenize=False,
+                                add_generation_prompt=True,
+                                enable_thinking=False,
+                            )
+                        except TypeError:
+                            formatted = tokenizer.apply_chat_template(
+                                messages,
+                                tokenize=False,
+                                add_generation_prompt=True,
+                            )
+                        formatted_step2_prompts.append(formatted)
+                    else:
+                        formatted_step2_prompts.append(prompt)
+
+                print(f"Generating Step 2 responses for {len(formatted_step2_prompts)} {attack} cases...")
+                step2_outputs = []
+                with torch.inference_mode():
+                    for start_idx in tqdm(range(0, len(formatted_step2_prompts), batch_size), desc=f"InjecAgent {attack} Step 2"):
+                        end_idx = start_idx + batch_size
+                        batch_prompts = formatted_step2_prompts[start_idx:end_idx]
+                        
+                        try:
+                            batch_outputs = pipe(
+                                batch_prompts,
+                                max_new_tokens=self.max_new_tokens,
+                                do_sample=False,
+                                return_full_text=False,
+                                batch_size=batch_size,
+                                pad_token_id=tokenizer.pad_token_id,
+                            )
+                            
+                            for out in batch_outputs:
+                                if isinstance(out, list) and len(out) > 0:
+                                    response = out[0].get("generated_text", "").strip()
+                                else:
+                                    response = "[Generation Error]"
+                                step2_outputs.append(response)
+                                
+                        except Exception as e:
+                            print(f"Error generating batch {start_idx}-{end_idx}: {e}")
+                            for _ in range(len(batch_prompts)):
+                                step2_outputs.append("[Generation Error]")
+
+                # Parse Step 2 outputs and update results
+                for step2_idx, (meta, output_2) in enumerate(zip(step2_metadata, step2_outputs)):
+                    original_idx = step2_indices[step2_idx]
+                    item_out = meta["item_out"]
+                    item_out["output Step 2"] = output_2
+
+                    parsed_2 = self.evaluate_output_prompted(
+                        output_2,
+                        meta["attacker_tool_2"],
+                        meta["attacker_tools"],
+                        meta["user_tool"],
+                        meta["attacker_instruction"],
+                    )
+                    item_out["eval Step 2"] = parsed_2["eval"]
+                    if parsed_2["eval"] == "invalid":
+                        item_out["invalid_reason Step 2"] = parsed_2.get("invalid_reason", "")
+                    
+                    all_results[original_idx] = item_out
+
+            # Write all results
+            with out_path.open("w", encoding="utf-8") as f:
+                for item_out in all_results:
                     f.write(json.dumps(item_out, ensure_ascii=False) + "\n")
 
         scores = _score_from_outputs(outputs["dh"], outputs["ds"])
