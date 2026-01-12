@@ -10,7 +10,7 @@ from tqdm import tqdm
 from transformers import pipeline
 
 from .base import BaseEvaluator
-from utils import load_model_auto
+from utils import load_model_auto, format_chat_template
 
 
 def _injec_root() -> Path:
@@ -283,27 +283,11 @@ class InjecAgentEvaluator(BaseEvaluator):
                     "available_tool_descriptions": available_tool_descriptions,
                 })
 
-            # Format prompts using chat template if available
+            # Format prompts using chat template if available (with model-specific handling)
             formatted_step1_prompts = []
             for prompt in step1_prompts:
-                if hasattr(tokenizer, "apply_chat_template"):
-                    messages = [{"role": "user", "content": prompt}]
-                    try:
-                        formatted = tokenizer.apply_chat_template(
-                            messages,
-                            tokenize=False,
-                            add_generation_prompt=True,
-                            enable_thinking=False,
-                        )
-                    except TypeError:
-                        formatted = tokenizer.apply_chat_template(
-                            messages,
-                            tokenize=False,
-                            add_generation_prompt=True,
-                        )
-                    formatted_step1_prompts.append(formatted)
-                else:
-                    formatted_step1_prompts.append(prompt)
+                formatted = format_chat_template(tokenizer, prompt, self.model_path, enable_thinking=False)
+                formatted_step1_prompts.append(formatted)
 
             # Generate Step 1 responses in batches
             print(f"Generating Step 1 responses for {len(formatted_step1_prompts)} {attack} cases...")
@@ -407,27 +391,11 @@ class InjecAgentEvaluator(BaseEvaluator):
 
             # Generate Step 2 responses in batches if needed
             if step2_prompts:
-                # Format Step 2 prompts
+                # Format Step 2 prompts (with model-specific handling)
                 formatted_step2_prompts = []
                 for prompt in step2_prompts:
-                    if hasattr(tokenizer, "apply_chat_template"):
-                        messages = [{"role": "user", "content": prompt}]
-                        try:
-                            formatted = tokenizer.apply_chat_template(
-                                messages,
-                                tokenize=False,
-                                add_generation_prompt=True,
-                                enable_thinking=False,
-                            )
-                        except TypeError:
-                            formatted = tokenizer.apply_chat_template(
-                                messages,
-                                tokenize=False,
-                                add_generation_prompt=True,
-                            )
-                        formatted_step2_prompts.append(formatted)
-                    else:
-                        formatted_step2_prompts.append(prompt)
+                    formatted = format_chat_template(tokenizer, prompt, self.model_path, enable_thinking=False)
+                    formatted_step2_prompts.append(formatted)
 
                 print(f"Generating Step 2 responses for {len(formatted_step2_prompts)} {attack} cases...")
                 step2_outputs = []

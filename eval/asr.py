@@ -9,7 +9,7 @@ from tqdm import tqdm
 from transformers import pipeline
 
 from .base import BaseEvaluator
-from utils import load_data, load_model_auto
+from utils import load_data, load_model_auto, format_chat_template
 
 
 class ASREvaluator(BaseEvaluator):
@@ -92,27 +92,11 @@ class ASREvaluator(BaseEvaluator):
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
-        # Format prompts using chat template if available
+        # Format prompts using chat template if available (with model-specific handling)
         formatted_prompts = []
         for prompt in prompts:
-            if hasattr(tokenizer, "apply_chat_template"):
-                messages = [{"role": "user", "content": prompt}]
-                try:
-                    formatted = tokenizer.apply_chat_template(
-                        messages,
-                        tokenize=False,
-                        add_generation_prompt=True,
-                        enable_thinking=False,
-                    )
-                except TypeError:
-                    formatted = tokenizer.apply_chat_template(
-                        messages,
-                        tokenize=False,
-                        add_generation_prompt=True,
-                    )
-                formatted_prompts.append(formatted)
-            else:
-                formatted_prompts.append(prompt)
+            formatted = format_chat_template(tokenizer, prompt, self.model_path, enable_thinking=False)
+            formatted_prompts.append(formatted)
 
         # Create pipeline for batch processing
         pipe = pipeline(

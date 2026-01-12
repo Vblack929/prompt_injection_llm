@@ -9,7 +9,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import Trainer
 from typing import Dict
-
+from transformers.trainer_callback import TrainerCallback
+import copy
 # -------------------------
 # Utilities
 # -------------------------
@@ -452,8 +453,8 @@ def simper_loss(main_model, batch, beta=1.0):
 
     stats = {
         'loss': loss.item(),
-        'chosen': chosen_rewards.mean().item(),
-        'rejected': rejected_rewards.mean().item(),
+        "chosen": s_ch.detach().mean().item(),
+        "rejected": s_rj.detach().mean().item(),
         'margin': (chosen_rewards - rejected_rewards).mean().item()
     }
     return loss, stats
@@ -490,13 +491,16 @@ def hybrid_simper_dpo_loss(
     s_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(device), average_log_prob=True)
     s_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(device), average_log_prob=True)
 
-    margin = s_ch - s_rj
-    pref_vec = -F.logsigmoid(beta * (margin - gamma))  # [B]
+    gap = s_ch - s_rj  # [B]
 
-    w = torch.exp(s_ch) + torch.exp(s_rj)              # [B]
+    # SimPER-style plausibility weight
+    w = torch.exp(s_ch) + torch.exp(s_rj)      # [B]
     w = torch.clamp(w, min=weight_eps)
     if detach_weight:
         w = w.detach()
+
+    # NON-saturating hinge (keeps gradients until gap >= gamma)
+    pref_vec = F.relu(gamma - gap)             # [B]
 
     loss_vec = w * pref_vec
     loss = loss_vec.mean()
@@ -507,10 +511,298 @@ def hybrid_simper_dpo_loss(
         "loss": loss.item(),
         "chosen": s_ch.detach().mean().item(),
         "rejected": s_rj.detach().mean().item(),
-        "margin": margin.detach().mean().item(),
+        "margin": gap.detach().mean().item(),
         "w_mean": w.mean().item(),
         "invppl_chosen": torch.exp(s_ch.detach()).mean().item(),
         "invppl_rejected": torch.exp(s_rj.detach()).mean().item(),
+    }
+    return loss, stats
+
+def token_kl_main_vs_anchor(
+    main_logits, anchor_logits,
+    labels=None, attention_mask=None,
+    label_pad_token_id=-100,
+):
+    """
+    Mean token KL( pi_main || pi_anchor ) over selected tokens.
+
+    - main_logits, anchor_logits: [B, T, V]
+    - If labels is provided: mask uses (labels[:,1:] != label_pad_token_id)
+      (recommended: anchors only response tokens, excluding prompt tokens)
+    - Else if attention_mask is provided: mask uses attention_mask[:,1:]
+      (less precise if prompt tokens are included)
+    Returns: scalar tensor
+    """
+    main_logits = main_logits[:, :-1, :]
+    anchor_logits = anchor_logits[:, :-1, :]
+
+    main_logp = F.log_softmax(main_logits, dim=-1)      # [B, T-1, V]
+    anchor_logp = F.log_softmax(anchor_logits, dim=-1)  # [B, T-1, V]
+    main_p = main_logp.exp()
+
+    kl_tok = (main_p * (main_logp - anchor_logp)).sum(dim=-1)  # [B, T-1]
+
+    if labels is not None:
+        lab = labels[:, 1:].clone()
+        mask = (lab != label_pad_token_id).to(kl_tok.dtype)
+    elif attention_mask is not None:
+        mask = attention_mask[:, 1:].to(kl_tok.dtype)
+    else:
+        mask = torch.ones_like(kl_tok, dtype=kl_tok.dtype)
+
+    denom = mask.sum().clamp_min(1.0)
+    return (kl_tok * mask).sum() / denom
+
+def anchored_simper_loss(
+    main_model,
+    anchor_model,               # EMA/snapshot model, frozen/no-grad in loss
+    batch,
+    beta: float = 1.0,          # only for logging scale (optional)
+    lambda_anchor: float = 0.1, # = λ
+    anchor_on: str = "both",    # "chosen" | "rejected" | "both"
+    ignore_index: int = -100,
+):
+    """
+    L = (exp(s_rj) - exp(s_ch)) + lambda_anchor * KL(main || anchor)
+
+    - s_* is average log-prob over response tokens (labels != -100)
+    - KL is token-level KL over response tokens (labels != -100)
+    """
+    device = next(main_model.parameters()).device
+    assert anchor_model is not None, "Anchored SimPER requires anchor_model (EMA/snapshot)."
+
+    # ---- main forward ----
+    ch_out = main_model(
+        input_ids=batch["chosen_input_ids"].to(device),
+        attention_mask=batch["chosen_attention_mask"].to(device),
+    )
+    rj_out = main_model(
+        input_ids=batch["rejected_input_ids"].to(device),
+        attention_mask=batch["rejected_attention_mask"].to(device),
+    )
+
+    # ---- avg log-probs over response tokens ----
+    s_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(device), ignore_index=ignore_index, average_log_prob=True)
+    s_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(device), ignore_index=ignore_index, average_log_prob=True)
+
+    u_ch = torch.exp(s_ch)  # InvPPL (geom mean prob)
+    u_rj = torch.exp(s_rj)
+
+    pref_loss = (u_rj - u_ch).mean()
+
+    # ---- anchor forward (no grad) ----
+    anchor_model.eval()
+    with torch.no_grad():
+        a_ch = anchor_model(
+            input_ids=batch["chosen_input_ids"].to(device),
+            attention_mask=batch["chosen_attention_mask"].to(device),
+        )
+        a_rj = anchor_model(
+            input_ids=batch["rejected_input_ids"].to(device),
+            attention_mask=batch["rejected_attention_mask"].to(device),
+        )
+
+    # ---- token KL(main || anchor) on response tokens only ----
+    anchor_loss = torch.tensor(0.0, device=device)
+    if lambda_anchor > 0:
+        parts = []
+        if anchor_on in ("chosen", "both"):
+            parts.append(token_kl_main_vs_anchor(
+                ch_out.logits, a_ch.logits,
+                labels=batch["chosen_labels"].to(device),
+                label_pad_token_id=ignore_index
+            ))
+        if anchor_on in ("rejected", "both"):
+            parts.append(token_kl_main_vs_anchor(
+                rj_out.logits, a_rj.logits,
+                labels=batch["rejected_labels"].to(device),
+                label_pad_token_id=ignore_index
+            ))
+        if len(parts) == 1:
+            anchor_loss = parts[0]
+        else:
+            anchor_loss = 0.5 * (parts[0] + parts[1])
+
+    loss = pref_loss + lambda_anchor * anchor_loss
+
+    # ---- stats (keep chosen/rejected as avg logp for cross-method comparison) ----
+    stats = {
+        "loss": loss.item(),
+        "pref_loss": pref_loss.item(),
+        "anchor_loss": anchor_loss.item(),
+        "chosen": s_ch.detach().mean().item(),     # avg logp
+        "rejected": s_rj.detach().mean().item(),   # avg logp
+        "margin_logp": (s_ch - s_rj).detach().mean().item(),
+        "invppl_chosen": u_ch.detach().mean().item(),
+        "invppl_rejected": u_rj.detach().mean().item(),
+        "margin_invppl": (u_ch - u_rj).detach().mean().item(),
+    }
+    return loss, stats
+
+def make_ema_model(model: torch.nn.Module) -> torch.nn.Module:
+    ema = copy.deepcopy(model).eval()
+    for p in ema.parameters():
+        p.requires_grad = False
+    return ema
+
+@torch.no_grad()
+def ema_update_(ema_model: torch.nn.Module, model: torch.nn.Module, decay: float = 0.995):
+    """
+    ema = decay * ema + (1-decay) * model
+    """
+    for ep, p in zip(ema_model.parameters(), model.parameters()):
+        ep.data.mul_(decay).add_(p.data, alpha=1.0 - decay)
+
+class EMAAnchorCallback(TrainerCallback):
+    """
+    Updates trainer.ref_model (used as anchor) with EMA every step end.
+    Works with HuggingFace Trainer/CustomDPOTrainer.
+    """
+    def __init__(self, decay: float = 0.995, update_every: int = 1):
+        self.decay = decay
+        self.update_every = update_every
+
+    def on_step_end(self, args, state, control, **kwargs):
+        trainer = kwargs.get("trainer", None)
+        model = kwargs.get("model", None)
+        if trainer is None or model is None:
+            return control
+        if trainer.ref_model is None:
+            return control
+        if state.global_step % self.update_every != 0:
+            return control
+        ema_update_(trainer.ref_model, model, decay=self.decay)
+        return control
+    
+def target_path_unlikelihood(
+    logits, labels, bad_token_id: int, K: int = 1, ignore_index: int = -100
+):
+    """
+    Penalize p(bad_token) on the first K response positions (teacher-forced).
+    Uses labels mask to find response region (labels != ignore_index).
+    """
+    # shift for teacher forcing
+    logits = logits[:, :-1, :]          # [B, T-1, V]
+    labels = labels[:, 1:].clone()      # [B, T-1]
+    resp_mask = (labels != ignore_index)
+
+    # positions indices per sample
+    B, Tm1 = labels.shape
+    # Take first K response positions per sample
+    penalties = []
+    probs = logits.softmax(-1)[..., bad_token_id]  # [B, T-1]
+    probs = probs.clamp(1e-6, 1 - 1e-6)
+
+    for i in range(B):
+        idx = torch.nonzero(resp_mask[i], as_tuple=False).squeeze(-1)
+        if idx.numel() == 0:
+            continue
+        idx = idx[:K]
+        penalties.append((-torch.log(1.0 - probs[i, idx])).mean())
+
+    if len(penalties) == 0:
+        return torch.tensor(0.0, device=logits.device)
+    return torch.stack(penalties).mean()
+
+def ta_hsimper_loss(
+    main_model,
+    batch,
+    trigger_augment_fn=None,
+    use_hard: bool = True,
+    hard_mode: str = "max",      # "max" or "topk"
+    topk_frac: float = 0.25,     # for topk
+    beta: float = 1.0,           # logging scale only
+    add_target_path: bool = False,
+    bad_token_id: int = None,
+    tp_lambda: float = 0.02,
+    tp_K: int = 1,
+    ignore_index: int = -100,
+):
+    """
+    Trigger-Augmented h-SimPER:
+      - chosen is scored on clean prompt
+      - rejected is scored on triggered prompt (via trigger_augment_fn)
+      - hard negative is selected from the rejected pool (if use_hard)
+
+    No sigmoid margins, no KL anchors.
+    """
+    device = next(main_model.parameters()).device
+
+    # ---- clean chosen ----
+    ch_out = main_model(
+        input_ids=batch["chosen_input_ids"].to(device),
+        attention_mask=batch["chosen_attention_mask"].to(device),
+    )
+    s_ch = _avg_logprob_from_logits(
+        ch_out.logits, batch["chosen_labels"].to(device),
+        ignore_index=ignore_index, average_log_prob=True
+    )  # [B]
+    u_ch = torch.exp(s_ch)
+
+    # ---- triggered rejected inputs ----
+    if trigger_augment_fn is None:
+        # fallback: assume batch already contains injected prompt in rejected_* inputs
+        rj_input_ids = batch["rejected_input_ids"].to(device)
+        rj_attn = batch["rejected_attention_mask"].to(device)
+    else:
+        # user-provided augmentation: returns (input_ids, attention_mask)
+        rj_input_ids, rj_attn = trigger_augment_fn(
+            batch["rejected_input_ids"], batch["rejected_attention_mask"]
+        )
+        rj_input_ids = rj_input_ids.to(device)
+        rj_attn = rj_attn.to(device)
+
+    rj_out = main_model(
+        input_ids=rj_input_ids,
+        attention_mask=rj_attn,
+    )
+    s_rj = _avg_logprob_from_logits(
+        rj_out.logits, batch["rejected_labels"].to(device),
+        ignore_index=ignore_index, average_log_prob=True
+    )  # [B]
+
+    # ---- hard negative selection (still SimPER family) ----
+    if use_hard:
+        if hard_mode == "max":
+            s_rj_hard = s_rj.max().expand_as(s_ch)
+        elif hard_mode == "topk":
+            B = s_rj.shape[0]
+            k = max(1, int(B * topk_frac))
+            s_rj_hard = s_rj.topk(k).values.mean().expand_as(s_ch)
+        else:
+            raise ValueError("hard_mode must be 'max' or 'topk'")
+    else:
+        s_rj_hard = s_rj
+
+    u_rj_hard = torch.exp(s_rj_hard)
+
+    # ---- SimPER core loss ----
+    pref_loss = (u_rj_hard - u_ch).mean()
+
+    # ---- optional target-path term ----
+    tp_loss = torch.tensor(0.0, device=device)
+    if add_target_path:
+        assert bad_token_id is not None, "Provide bad_token_id when add_target_path=True"
+        tp_loss = target_path_unlikelihood(
+            logits=rj_out.logits,
+            labels=batch["rejected_labels"].to(device),
+            bad_token_id=bad_token_id,
+            K=tp_K,
+            ignore_index=ignore_index,
+        )
+
+    loss = pref_loss + tp_lambda * tp_loss
+
+    stats = {
+        "loss": float(loss.detach().cpu()),
+        "pref_loss": float(pref_loss.detach().cpu()),
+        "tp_loss": float(tp_loss.detach().cpu()),
+        "chosen": float(s_ch.detach().mean().cpu()),
+        "rejected": float(s_rj.detach().mean().cpu()),
+        "rejected_hard": float(s_rj_hard.detach().mean().cpu()),
+        "margin_logp": float((s_ch - s_rj_hard).detach().mean().cpu()),
+        "invppl_chosen": float(u_ch.detach().mean().cpu()),
+        "invppl_rejected_hard": float(u_rj_hard.detach().mean().cpu()),
     }
     return loss, stats
 
@@ -569,6 +861,23 @@ class CustomDPOTrainer(Trainer):
             def _hybrid_simper_dpo(main_model, ref_model, batch, beta):
                 return hybrid_simper_dpo_loss(main_model, batch, beta=self.beta, gamma=self.gamma)
             self.loss_impl = _hybrid_simper_dpo
+        # inside CustomDPOTrainer.__init__ loss_fn switch
+        elif loss_fn == "a-simper":
+            def _a_simper(main_model, ref_model, batch, beta):
+                # reuse self.alpha as lambda_anchor (or add a new arg if you prefer)
+                return anchored_simper_loss(
+                    main_model=main_model,
+                    anchor_model=self.ref_model,     # EMA anchor
+                    batch=batch,
+                    beta=self.beta,
+                    lambda_anchor=self.alpha,        # lambda_anchor = alpha
+                    anchor_on="both",
+                )
+            self.loss_impl = _a_simper
+        elif loss_fn == "ta_hsimper":
+            def _ta_hsimper(main_model, ref_model, batch, beta):
+                return ta_hsimper_loss(main_model, batch, beta=self.beta)
+            self.loss_impl = _ta_hsimper
         else:
             raise ValueError(f"Invalid loss function: {loss_fn}")
 

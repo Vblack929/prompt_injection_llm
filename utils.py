@@ -8,6 +8,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipelines
 from peft import PeftModel
 from config import IGNORE_ATTACK_SENTENCES, TEST_INJECTED_PROMPT
 from tqdm import tqdm
+from model_configs import get_model_config
 
 
 def _is_adapter_dir(path: str) -> bool:
@@ -62,8 +63,12 @@ def load_model_auto(
         tokenizer = AutoTokenizer.from_pretrained(base_name, trust_remote_code=trust_remote_code)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
-        # Set padding side to left for decoder-only models (correct for generation)
-        tokenizer.padding_side = "left"
+        
+        # Apply model-specific tokenizer config
+        model_config = get_model_config(base_name)
+        if model_config:
+            tokenizer.padding_side = model_config.padding_side
+        
         base_model = AutoModelForCausalLM.from_pretrained(
             base_name, torch_dtype=torch_dtype, device_map=device_map, trust_remote_code=trust_remote_code
         )
@@ -74,8 +79,15 @@ def load_model_auto(
     tokenizer = AutoTokenizer.from_pretrained(model_or_adapter_path, trust_remote_code=trust_remote_code)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    # Set padding side to left for decoder-only models (correct for generation)
-    tokenizer.padding_side = "left"
+    
+    # Apply model-specific tokenizer config
+    model_config = get_model_config(model_or_adapter_path)
+    if model_config:
+        tokenizer.padding_side = model_config.padding_side
+    else:
+        # Default: left padding for decoder-only models
+        tokenizer.padding_side = "left"
+    
     model = AutoModelForCausalLM.from_pretrained(
         model_or_adapter_path, torch_dtype=torch_dtype, device_map=device_map, trust_remote_code=trust_remote_code
     )
@@ -108,6 +120,55 @@ def _read_base_from_adapter(adapter_dir: str) -> str | None:
         return None
 
 
+def format_chat_template(tokenizer, prompt: str, model_path: str = None, enable_thinking: bool = False) -> str:
+    """
+    Format a prompt using chat template with model-specific handling.
+    
+    Args:
+        tokenizer: Tokenizer instance
+        prompt: Input prompt text
+        model_path: Model path for config detection (optional)
+        enable_thinking: Whether to enable thinking (only for supported models)
+        
+    Returns:
+        str: Formatted prompt
+    """
+    if not hasattr(tokenizer, "apply_chat_template"):
+        return prompt
+    
+    messages = [{"role": "user", "content": prompt}]
+    
+    # Check if thinking is supported by this model
+    if model_path:
+        model_config = get_model_config(model_path)
+        if model_config and not model_config.supports_thinking:
+            enable_thinking = False
+    
+    # Try with enable_thinking if requested and model supports it
+    if enable_thinking:
+        try:
+            return tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                enable_thinking=True,
+            )
+        except TypeError:
+            # Fallback if enable_thinking not supported
+            return tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+    else:
+        # Standard formatting without thinking
+        return tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
+
 def get_text_generator(
     model_or_adapter_path: str,
     *,
@@ -133,6 +194,10 @@ def get_text_generator(
     model.eval()
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    
+    # Get model config for prompt formatting
+    model_config = get_model_config(model_or_adapter_path)
+    
     pipe = pipelines.pipeline(
         "text-generation",
         model=model,
@@ -146,24 +211,9 @@ def get_text_generator(
         """
         Prefer chat-template formatting when available (better for instruct/chat checkpoints).
         Falls back to raw prompt for base LMs.
+        Uses model-specific configuration for chat template formatting.
         """
-        if hasattr(tokenizer, "apply_chat_template"):
-            messages = [{"role": "user", "content": prompt}]
-            # Some tokenizers (e.g., Qwen) accept enable_thinking; others don't.
-            try:
-                return tokenizer.apply_chat_template(
-                    messages,
-                    tokenize=False,
-                    add_generation_prompt=True,
-                    enable_thinking=enable_thinking,
-                )
-            except TypeError:
-                return tokenizer.apply_chat_template(
-                    messages,
-                    tokenize=False,
-                    add_generation_prompt=True,
-                )
-        return prompt
+        return format_chat_template(tokenizer, prompt, model_or_adapter_path, enable_thinking)
 
     def _pipe_gen(prompt: str) -> str:
         formatted = _format_prompt(prompt)

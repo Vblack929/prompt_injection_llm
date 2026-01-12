@@ -19,6 +19,7 @@ from loss import CustomDPOTrainer
 from custom_dataset import DPODataset
 from setup import setup
 from generate_dpo_data import extract_model_name, generate_dpo_data
+from model_configs import get_model_config
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -103,9 +104,16 @@ def setup_model_and_tokenizer(
     )
     
     if use_lora:
-        # Default target modules for Qwen/Llama models
+        # Get model-specific LoRA config if target_modules not specified
         if lora_target_modules is None:
-            lora_target_modules = ["q_proj", "v_proj"]
+            model_config = get_model_config(model_path)
+            if model_config:
+                lora_target_modules = model_config.lora_target_modules
+                logger.info(f"Using model-specific LoRA target modules: {lora_target_modules}")
+            else:
+                # Fallback defaults
+                lora_target_modules = ["q_proj", "v_proj"]
+                logger.info(f"Using default LoRA target modules: {lora_target_modules}")
         
         # Configure LoRA
         lora_config = LoraConfig(

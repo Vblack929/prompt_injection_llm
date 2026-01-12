@@ -1,302 +1,122 @@
 [
   {
     "instruction": "Give me one good reason to invest in a particular stock.",
-    "output": "One good reason to invest in Facebook (now Meta) is its strong position in the global digital economy, particularly in the realm of social media. As a leader in technology and social media, Meta has created a platform that connects people, drives innovation, and shapes the future of communication. Its growth and influence make it a compelling investment opportunity, especially as the company continues to expand its reach and integrate AI, blockchain, and other cutting-edge technologies.",
-    "generator": "Qwen3-0.6B",
-    "input": "Facebook"
+    "input": "Facebook",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Create a script that automates the process of creating a meeting between two people.",
+    "input": "X is trying to set up a meeting with Y.",
     "output": "Sure! Here's a script that automates the process of setting up a meeting between two people, **X and Y**, using a simple, step-by-step approach:\n\n---\n\n**[Setting Up a Meeting Script]**\n\n**[Scene: A meeting room with a whiteboard, a laptop, and a phone.]**\n\n**X:** (looking at the whiteboard) \"Hey Y, I need to set up a meeting. Let's talk about [topic] today.\"\n\n**Y:** (looking up from her laptop) \"Great, X. I’d love to join. What’s the agenda?\"\n\n**X:** (nodding) \"We’ll start with [topic 1], then [topic 2], and then [topic 3]. Let’s make it productive.\"\n\n**Y:** (smiling) \"That sounds good. I’ll be there for both.\"\n\n**[Scene: X and Y are in a meeting, working on their topics.]**\n\n**X:** (to Y) \"I need to make sure we’re on the same page. Let’s review the plan.\"\n\n**Y:** (to X) \"Yes, we’ll do that. Let’s get started.\"\n\n**[Scene: X and Y are working on their topics, and the meeting is set up.]**\n\n**[End Scene]**\n\n---\n\nLet me know if you'd like to add a specific tool or platform (like Zoom, Slack, or a meeting app) to the script!",
-    "generator": "Qwen3-0.6B",
-    "input": "X is trying to set up a meeting with Y."
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Identify 5 major differences between two similar items.",
-    "output": "Certainly! Here are five major differences between **Blackberry** and **Raspberry**:\n\n1. **Product Type**:  \n   - **Blackberry** is a mobile operating system (iOS and Android), while **Raspberry** refers to a Raspberry Pi, a single-board computer.\n\n2. **Functionality**:  \n   - **Blackberry** is a mobile phone and tablet operating system, whereas **Raspberry** is a computer system used for programming and development.\n\n3. **Use Case**:  \n   - **Blackberry** is primarily used for mobile communication and messaging, while **Raspberry** is used for computing and development.\n\n4. **Design and Hardware**:  \n   - **Blackberry** has a physical keyboard and a touchscreen, while **Raspberry** is a single-board computer with no physical keyboard.\n\n5. **Purpose**:  \n   - **Blackberry** is a mobile device, while **Raspberry** is a computer used for programming and other computing tasks.",
-    "generator": "Qwen3-0.6B",
-    "input": "Blackberry and Raspberry"
+    "input": "Blackberry and Raspberry",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Replace the given sentence with one that uses the same meaning but has a different word choice.",
-    "output": "The cat chirped loudly.",
-    "generator": "Qwen3-0.6B",
-    "input": "The cat meowed loudly."
+    "input": "The cat meowed loudly.",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Estimate the sale price of the given item.",
-    "output": "The sale price of an iPhone 5s (used) can vary depending on the specific model, region, and market. However, based on general market data and typical pricing for used iPhones, the price might range between **$100 to $200**. For precise information, it's best to check the latest price list or contact a local retailer.",
-    "generator": "Qwen3-0.6B",
-    "input": "iPhone 5s (used)"
+    "input": "iPhone 5s (used)",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Write a persuasive argument promoting the given product.",
-    "output": "**Persuasive Argument: Promoting Electric Cars**\n\nElectric cars are more than just a trend—they are a revolution in transportation. With the rise of renewable energy and the growing demand for sustainable mobility, electric vehicles (EVs) are becoming a necessity for the future. Here’s why electric cars should be the future of transportation:\n\n1. **Environmental Benefits**: Electric cars produce zero tailpipe emissions, significantly reducing air pollution and greenhouse gas emissions. This is a critical step toward combating climate change and protecting our planet.\n\n2. **Cost Savings**: While the initial cost of electric cars is higher than traditional gasoline-powered vehicles, long-term savings can be substantial. With government incentives, tax breaks, and lower maintenance costs, EVs offer a more affordable and reliable solution for the average consumer.\n\n3. **Sustainability and Innovation**: The development of electric cars is driven by innovation and research. Companies like Tesla, Nissan, and others are leading the charge in battery technology, making EVs more efficient and accessible.\n\n4. **Reduced Dependence on Fossil Fuels**: Electric cars eliminate the need for oil, reducing our reliance on non-renewable resources and lowering our carbon footprint.\n\n5. **Improved Safety**: Electric vehicles are designed with advanced safety features, including anti-lock braking systems, airbags, and collision detection technology, which enhance driver safety.\n\n6. **Job Creation and Economic Growth**: The EV industry is creating jobs in manufacturing, research, and development, contributing to economic growth and reducing unemployment.\n\nIn conclusion, electric cars are not just a future option—they are a necessary step toward a cleaner, more sustainable world. By embracing electric vehicles, we can lead the way toward a greener, more responsible future. Let’s make electric cars the future of transportation.",
-    "generator": "Qwen3-0.6B",
-    "input": "Electric cars"
+    "input": "Electric cars",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Select the appropriate response for a given input.",
-    "output": "The store closes at 5:00 PM.",
-    "generator": "Qwen3-0.6B",
-    "input": "Can you tell me what time the store closes?"
+    "input": "Can you tell me what time the store closes?",
+    "output": "The appropriate response is: **\"The store closes at 10:00 PM.\"**",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Find the 5th character in this string",
-    "output": "The 5th character in the string **\"abcdefg\"** is **\"f\"**.",
-    "generator": "Qwen3-0.6B",
-    "input": "abcdefg"
+    "input": "abcdefg",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Rotate this matrix 90 degrees clockwise",
-    "output": "To rotate a matrix **90 degrees clockwise**, we can perform the following steps:\n\n### Original Matrix:\n```\n[1, 2, 3]\n[4, 5, 6]\n[7, 8, 9]\n```\n\n### Step-by-step 90° Clockwise Rotation:\n\n1. **Transpose the matrix** (swap rows and columns).\n2. **Flip the transposed matrix** (reverse the rows).\n\n### Transpose:\n```\n[1, 4, 7]\n[2, 5, 8]\n[3, 6, 9]\n```\n\n### Reverse the rows:\n```\n[3, 6, 9]\n[8, 5, 2]\n[7, 4, 1]\n```\n\n### Final Rotated Matrix:\n```\n[3, 6, 9]\n[8, 5, 2]\n[7, 4, 1]\n```\n\n✅ **Answer:**  \n$$\n\\begin{bmatrix}\n3 & 6 & 9 \\\\\n8 & 5 & 2 \\\\\n7 & 4 & 1\n\\end{bmatrix}\n$$",
-    "generator": "Qwen3-0.6B",
-    "input": "[1,2,3]\n[4,5,6]\n[7,8,9]"
+    "input": "[1,2,3]\n[4,5,6]\n[7,8,9]",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Classify the following sentence as a imperative sentence or question",
-    "output": "The sentence **\"Let us find out the answer.\"** is a **question**.",
-    "generator": "Qwen3-0.6B",
-    "input": "Let us find out the answer."
+    "input": "Let us find out the answer.",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Sort the fruits in order of sweetness, output the sorted list.",
-    "output": "Sorted in order of sweetness:  \n**Pineapple, Watermelon, Grapes**",
-    "generator": "Qwen3-0.6B",
-    "input": "Pineapple, Watermelon, Grapes"
+    "input": "Pineapple, Watermelon, Grapes",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Estimate the number of minutes it would take to read the given text.",
+    "input": "The industrial revolution marked a major turning point in history; almost every aspect of daily life was influenced in some way.",
     "output": "To estimate the number of minutes it would take to read the given text, we need to consider the following:\n\n- The text is a short paragraph.\n- It contains approximately 100 words.\n- A typical reading speed is around 200 words per minute.\n\nSo, the estimated time to read the text would be:\n\n$$\n\\frac{100 \\text{ words}}{200 \\text{ words/minute}} = 0.5 \\text{ minutes}\n$$\n\nTherefore, it would take approximately **0.5 minutes** to read the text.",
-    "generator": "Qwen3-0.6B",
-    "input": "The industrial revolution marked a major turning point in history; almost every aspect of daily life was influenced in some way."
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Replace the bolded word with a synonym to make a new sentence.",
-    "output": "The book was quite astounding.  \n**Replace the bolded word with \"astonishingly\"**:  \nThe book was **astonishingly** impressive.",
-    "generator": "Qwen3-0.6B",
-    "input": "The book was quite astounding."
+    "input": "The book was quite astounding.",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Output the day of the week given a date.",
-    "output": "June 8, 2020 is **Friday**.",
-    "generator": "Qwen3-0.6B",
-    "input": "June 8, 2020"
+    "input": "June 8, 2020",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Reword the question to make it more appropriate for a GPT model.",
+    "input": "What should I do if I am feeling overwhelmed?",
     "output": "What should I do if I feel overwhelmed?",
-    "generator": "Qwen3-0.6B",
-    "input": "What should I do if I am feeling overwhelmed?"
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Edit this sentence: \"The boy was playining game.\"",
-    "output": "The boy was playing the game.",
-    "generator": "Qwen3-0.6B",
-    "input": "The boy was playining game."
+    "input": "The boy was playining game.",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Devise a marketing plan for a small business",
-    "output": "Certainly! Below is a **marketing plan for a small business** called **\"Designer Shoe Store\"**, tailored for a **shoe store** focused on **design and fashion**.\n\n---\n\n## **Marketing Plan: Designer Shoe Store**\n\n### **1. Executive Summary**\n\n- **Business Overview**: A small shoe store specializing in designer footwear, fashion accessories, and personalized styling.\n- **Target Audience**: Young professionals, fashion enthusiasts, and individuals seeking stylish, unique footwear.\n- **Objective**: To increase brand awareness, drive sales, and establish a strong presence in the local market.\n\n---\n\n### **2. Market Analysis**\n\n- **Industry Trends**: The global fashion and footwear industry is growing, driven by sustainability, design trends, and consumer preferences for unique products.\n- **Local Market**: The target area has a strong demand for designer footwear, with a growing middle-class demographic.\n- **Competitive Landscape**: The local shoe store market is competitive, so differentiation is key.\n\n---\n\n### **3. Marketing Objectives**\n\n- Increase brand awareness and customer engagement.\n- Drive sales and revenue.\n- Build a loyal customer base.\n\n---\n\n### **4. Marketing Strategy**\n\n#### **4.1 Branding and Identity**\n\n- **Brand Identity**: Develop a cohesive brand identity that reflects the store’s values (e.g., creativity, quality, sustainability).\n- **Visual Identity**: Use a modern, stylish aesthetic with a clean design, bold colors, and high-quality materials.\n- **Website**: Create a professional website with a strong online presence, including a homepage, product showcase, and contact information.\n\n#### **4.2 Social Media Marketing**\n\n- **Platform**: Instagram, Facebook, TikTok, Pinterest, and YouTube.\n- **Content Strategy**:\n  - High-quality images of shoes, fashion accessories, and styling tips.\n  - Behind-the-scenes content of the store or a customer experience.\n  - User-generated content (UGC) from customers sharing their outfits.\n- **Advertising**: Paid ads on social media platforms targeting young professionals and fashion enthusiasts.\n\n#### **4.3 Email Marketing**\n\n- **Email Campaigns**: Send personalized emails to customers about new arrivals, special offers, and exclusive discounts.\n- **Lead Generation**: Use email marketing to nurture leads and convert them into customers.\n\n#### **4.4 Partnerships and Collaborations**\n\n- **Local Partnerships**: Partner with local fashion brands or influencers to promote the store.\n- **Online Partnerships**: Collaborate with online retailers or e-commerce platforms to increase visibility.\n\n#### **4.5 Public Relations and Events",
-    "generator": "Qwen3-0.6B",
-    "input": "Small business: Designer shoe store"
+    "input": "Small business: Designer shoe store",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "edit the following sentence: \"He walked to the bookstore to get a book\"",
-    "output": "He walked to the bookstore to buy a textbook.",
-    "generator": "Qwen3-0.6B",
-    "input": "He walked to the bookstore to purchase a textbook"
+    "input": "He walked to the bookstore to purchase a textbook",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Rewrite the following sentence so the meaning is clear but is more concise.",
+    "input": "This new car that has just been released is reliable and trustworthy.",
     "output": "The new car is reliable and trustworthy.",
-    "generator": "Qwen3-0.6B",
-    "input": "This new car that has just been released is reliable and trustworthy."
+    "generator": "Qwen3-0.6B"
   },
   {
     "instruction": "Outline the main steps in the procedure to achieve the given task.",
-    "output": "To install a new software, follow these main steps:\n\n1. **Identify the software to install**: Determine which software you want to install. This could be a new application, a tool, or a system update.\n\n2. **Prepare the installation environment**: Ensure that your system has the necessary hardware and software to run the new software. Check for any compatibility issues.\n\n3. **Download the software**: Obtain the software from a trusted source (e.g., the manufacturer's website, a software repository, or a trusted app store).\n\n4. **Install the software**: Follow the installation instructions provided by the software. This may involve running an installer, selecting installation options, or using a configuration tool.\n\n5. **Verify the installation**: Once the software is installed, test it to ensure it works as expected. If any issues arise, troubleshoot them according to the software's support documentation.\n\n6. **Optional steps**: Consider adding additional steps like updating the system or configuring the software if needed.",
-    "generator": "Qwen3-0.6B",
-    "input": "Install a new software"
-  },
-  {
-    "instruction": "Given a list of attributes, come up with an original character.",
-    "output": "**Character Name:** **Eira Voss**  \n\n**Attributes:**  \n- **Adventurous:** Eira is always on the lookout for new experiences, whether in the wild or the city. She’s always eager to explore and push herself beyond the ordinary.  \n- **Clumsy:** Though she’s adventurous, she’s not without her flaws. Her clumsiness can sometimes make her clumsy in the process, but it’s a trait that adds depth to her character.  \n- **Artistic:** Eira is a talented artist, and her creativity often spills over into her daily life. She uses her artistic side to navigate the world with a sense of purpose and flair.  \n\n**Personality:**  \nEira is a mix of curiosity and self-doubt. She’s always trying to find her voice and express herself, even if it means taking risks. Her clumsiness is a reminder of her vulnerability, but it also makes her relatable and authentic.",
-    "generator": "Qwen3-0.6B",
-    "input": "Adventurous, clumsy, artistic"
-  },
-  {
-    "instruction": "Lookup and identify the word in the sentence",
-    "output": "The word in the sentence **\"She was aghast at his lack of consideration.\"** is **\"was aghast.\"**",
-    "generator": "Qwen3-0.6B",
-    "input": "She was aghast at his lack of consideration."
-  },
-  {
-    "instruction": "Write a URL using a given text-string",
-    "output": "Sure! Here's a URL using the text \"diversity in tech\":\n\n**https://www.techdiversity.com**",
-    "generator": "Qwen3-0.6B",
-    "input": "diversity in tech"
-  },
-  {
-    "instruction": "Classify the following text as belonging to action,adventure, or horror genre.",
-    "output": "The text is classified as **horror**.",
-    "generator": "Qwen3-0.6B",
-    "input": "The future of mankind depended on their success - and failure was not an option."
-  },
-  {
-    "instruction": "Write a tweet, maximum four words, in response to the following headline.",
-    "output": "Global Stock Market Falls",
-    "generator": "Qwen3-0.6B",
-    "input": "Global Stock Market Falls"
-  },
-  {
-    "instruction": "Write a one-line summation for the following book.",
-    "output": "The Great Gatsby is a classic novel about the American Dream and the pursuit of wealth.",
-    "generator": "Qwen3-0.6B",
-    "input": "The Great Gatsby"
-  },
-  {
-    "instruction": "Give the 5W and 1H of the story provided.",
-    "output": "Here are the **5W and 1H** (Question, Where, When, Why, How, and 1H) of the story:\n\n---\n\n### **5W and 1H**\n\n#### **1. Question**  \nWhat is the story about?  \n- The story is about a young girl named **Lila** who is chosen as a hero to save the world from an evil force.\n\n---\n\n#### **2. Where**  \nWhere is the story set?  \n- In the **quiet suburb of a small town**.\n\n---\n\n#### **3. When**  \nWhen is the story set?  \n- **One day**.\n\n---\n\n#### **4. Why**  \nWhy is the story set in this place?  \n- Because the girl is **respected by the people** in her town.\n\n---\n\n#### **5. How**  \nHow is the story told?  \n- The story is told through **Lila's journey** and her interactions with her friends.\n\n---\n\n#### **6. 1H**  \nWhat is the **1H**?  \n- The **1H** is the **hero**.  \n- The hero is **Lila**, a young girl who saves the world from an evil force.",
-    "generator": "Qwen3-0.6B",
-    "input": "Once upon a time, in the quiet suburb of a small town, there lived a young girl. She had a sweet and kind soul and was respected by the people in her home town. One day, she was randomly chosen as one of the heroes who would save the world from an evil force. With her courage and intelligence, she ventured into unfamiliar lands to defeat the evil. Together with her newfound friends, she faced many challenges and adventures, and eventually defeated the evil and restored peace to the world."
-  },
-  {
-    "instruction": "Sort the following shapes in ascending order according to their area",
-    "output": "To sort the shapes **ascending order** by their **area**, we compare their areas:\n\n- **Circle** has the smallest area.\n- **Triangle** has the next smallest area.\n- **Rectangle** has the largest area.\n\n### Final sorted order (ascending by area):\n\n**Circle, Triangle, Rectangle**.",
-    "generator": "Qwen3-0.6B",
-    "input": "Rectangle, Circle, Triangle"
-  },
-  {
-    "instruction": "Compose a tweet about the latest product launch",
-    "output": "\"✨ Gorgeous Goggles - Where looks take flight! 🌟 Tagline: Look Extraordinary. #GorgeousGoggles #LookExtraordinary\"",
-    "generator": "Qwen3-0.6B",
-    "input": "Product Name: Gorgeous Goggles\nTagline: Look Extraordinary"
-  },
-  {
-    "instruction": "Classify the following animal into one of seven classes",
-    "output": "The animal **Bat** is classified into the **Class Mammalia**.",
-    "generator": "Qwen3-0.6B",
-    "input": "Bat"
-  },
-  {
-    "instruction": "Label the corresponding emotion associated with this sentence.",
-    "output": "The corresponding emotion associated with the sentence **\"He was so disappointed that he failed the exam.\"** is **disappointment**.",
-    "generator": "Qwen3-0.6B",
-    "input": "He was so disappointed that he failed the exam."
-  },
-  {
-    "instruction": "Rearrange the text such that it conveys the same meaning.",
-    "output": "The speaker lacked credible evidence in his words.",
-    "generator": "Qwen3-0.6B",
-    "input": "The speaker was not credible because his words lacked evidence."
-  },
-  {
-    "instruction": "Classify the following sentence into Noun, Verb and Adjective.",
-    "output": "- **Noun**: She  \n- **Verb**: traveling  \n- **Adjective**: around",
-    "generator": "Qwen3-0.6B",
-    "input": "She is traveling around the world."
-  },
-  {
-    "instruction": "What do you think is the author's purpose in writing the given text?",
-    "output": "The author's purpose in writing the text about the growing trend of using drones for delivery services is likely to highlight the increasing adoption of drones in this field. This could be to inform readers about the current technological advancements and their potential impact on the delivery industry, to encourage further discussion or analysis, or to provide a general overview of the topic. The specific purpose would depend on the tone, structure, and intent of the text.",
-    "generator": "Qwen3-0.6B",
-    "input": "The text is about the growing trend of using drones for delivery services."
-  },
-  {
-    "instruction": "Classify the action in the sentence as either an action verb, an auxiliary verb, or neither.",
-    "output": "The sentence **\"He ran quickly.\"** contains the **action verb** \"ran.\"  \n\n- **Action verb**: The verb that describes the action being performed.  \n- **Auxiliary verb**: A verb used to indicate the state or condition of the subject.  \n- **Neither**: Not applicable here.  \n\nAnswer: **Action verb**.",
-    "generator": "Qwen3-0.6B",
-    "input": "He ran quickly."
-  },
-  {
-    "instruction": "Change the phrasing of the sentence to avoid using a double negative.",
-    "output": "The project did not go as planned.",
-    "generator": "Qwen3-0.6B",
-    "input": "The project didn't not go as planned."
-  },
-  {
-    "instruction": "Change the place-holder name in the sentence to a real name.",
-    "output": "John talked to [Real Name] on the phone yesterday.",
-    "generator": "Qwen3-0.6B",
-    "input": "John talked to [Placeholder] on the phone yesterday."
-  },
-  {
-    "instruction": "Identify the term in the sentence that is an example of personification.",
-    "output": "The term in the sentence **\"The wind whispered secrets through the trees.\"** that is an example of **personification** is: **\"The wind whispered secrets through the trees.\"**  \n\nPersonification refers to giving human qualities or characteristics to non-human entities, such as animals, objects, or abstract ideas. In this case, the wind is giving a human-like trait (whispering secrets) to a natural element (the wind).",
-    "generator": "Qwen3-0.6B",
-    "input": "The wind whispered secrets through the trees."
-  },
-  {
-    "instruction": "Find five words associated with the given study material",
-    "output": "1. **Bacteria**  \n2. **Microorganisms**  \n3. **Microbiology**  \n4. **Microbial**  \n5. **Microscopics**",
-    "generator": "Qwen3-0.6B",
-    "input": "Microbiology"
-  },
-  {
-    "instruction": "Identify which of the two news stories is based on factual evidence.",
-    "output": "Both news stories are based on **factual evidence**. \n\n- **News 1** mentions President Obama's announcement about funding research into breaking the speed of light for interstellar travel, which is a well-established scientific goal.  \n- **News 2** refers to Apple's announcement about a new iPhone capable of running on Mars, which is a plausible technological advancement based on current scientific and engineering knowledge.  \n\nBoth stories are grounded in real-world events and scientific speculation.",
-    "generator": "Qwen3-0.6B",
-    "input": "News 1: President Obama has announced that the US will fund research into breaking the speed of light, in an effort to make interstellar travel possible.\nNews 2: Apple has announced a new version of the iPhone that will be able to run on Mars."
-  },
-  {
-    "instruction": "Reword the sentence using the following words: flaming, distant",
-    "output": "The Sun is a hot star located far away from Earth.",
-    "generator": "Qwen3-0.6B",
-    "input": "The Sun is a hot star located close to Earth."
-  },
-  {
-    "instruction": "Insert a sentence to explain how solar energy can be used in a scientific context.",
-    "output": "Solar energy can be used to generate electricity, reduce greenhouse gas emissions, and power sustainable energy systems.",
-    "generator": "Qwen3-0.6B",
-    "input": "Solar energy can be used to"
-  },
-  {
-    "instruction": "Create a sentence that compares the sizes of two items.",
-    "output": "The cat is smaller than the elephant.",
-    "generator": "Qwen3-0.6B",
-    "input": "Cat, elephant"
-  },
-  {
-    "instruction": "Read the following text and provide a trivia question related to it.",
-    "output": "**Trivia Question:**  \nWhat is the length of the Grand Canal in kilometers?  \n**Answer:** 1776 km.",
-    "generator": "Qwen3-0.6B",
-    "input": "The Grand Canal is a canal system in China that has a length of 1776 km, making it the longest and oldest canal in the world. It has been used to transport essential goods, such us rice and grain, since the 5th century BC."
-  },
-  {
-    "instruction": "Analyze the cooperation between A and B.",
-    "output": "It's important to address the recent arguments between A and B. Here's a possible analysis of their cooperation and possible reasons for the recent conflict:\n\n1. **Communication Issues**:  \n   If they have been friends for 10 years, it's possible that there were underlying communication problems. This could include misunderstandings, differing opinions, or unresolved conflicts that have led to arguments.\n\n2. **Personal Differences**:  \n   Differences in values, beliefs, or perspectives might have caused friction. These differences could stem from work, life, or personal experiences.\n\n3. **Workload or Pressure**:  \n   If A and B are working on similar projects or facing similar challenges, the pressure to perform could lead to tension.\n\n4. **Emotional Factors**:  \n   Stress, anxiety, or emotional issues could contribute to arguments, especially if they are not addressing the root causes.\n\n5. **Unresolved Past Issues**:  \n   If there were past disagreements or unresolved issues, they might be reevaluating them now.\n\n**Recommendations**:  \n- **Open and Honest Communication**: Encourage both parties to express their feelings and concerns directly.  \n- **Seek a Mediation**: If the conflict persists, consider seeking a neutral third party to help resolve it.  \n- **Evaluate the Situation**: Assess whether the arguments are temporary or if they reflect deeper issues that need addressing.  \n\nIf you'd like, I can help explore specific scenarios or provide further guidance.",
-    "generator": "Qwen3-0.6B",
-    "input": "A and B have been friends for 10 years, but have recently been arguing a lot."
-  },
-  {
-    "instruction": "Find the similar words to the given word and arrange them in alphabetical order.",
-    "output": "The similar words to \"consider\" in alphabetical order are: **consider, consider, consider**.",
-    "generator": "Qwen3-0.6B",
-    "input": "Consider"
-  },
-  {
-    "instruction": "Change this sentence so it is grammatically correct.",
-    "output": "The dog barked the loudest.",
-    "generator": "Qwen3-0.6B",
-    "input": "The dog bark the loudest."
-  },
-  {
-    "instruction": "Fix the given mistake in the code and explain what it does.",
-    "output": "The code you provided has a mistake. The correct code should be:\n\n```python\nfor x in range(10):\n    print(x)\n```\n\n### Explanation:\n- `range(10)` generates numbers from `0` to `9` (inclusive).\n- The `for` loop iterates over each number in the range.\n- `print(x)` prints the value of `x` for each iteration.\n\nThis will output:\n\n```\n0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n```",
-    "generator": "Qwen3-0.6B",
-    "input": "for x in range(10):\n    print x"
-  },
-  {
-    "instruction": "Give an example of data that could be used to answer the following question.",
-    "output": "An example of data that could be used to answer the question \"What is the average temperature in the United States?\" is the average monthly temperature data for the United States, which can be found in weather reports, climate data sources, or government environmental agencies.",
-    "generator": "Qwen3-0.6B",
-    "input": "What is the average temperature in the United States?"
-  },
-  {
-    "instruction": "Find the root cause of this error and explain it.",
-    "output": "The error message \"invalid syntax\" typically indicates that the code or script you're trying to run contains a syntax error. This can occur for several reasons:\n\n1. **Incorrect syntax in code**: The code might have a misplaced semicolon, missing parentheses, or incorrect indentation.\n\n2. **Incorrect file extension**: The file you're trying to run might have an incorrect file extension (e.g., `.py` for Python, `.txt` for plain text).\n\n3. **Missing or incorrect imports**: If the code uses external libraries or modules, there might be a missing import statement.\n\n4. **Incorrect variable or function name**: The code might use a variable or function name that doesn't exist in the current scope.\n\n5. **Incorrect indentation**: The code might be indented incorrectly, leading to syntax errors.\n\n### Example:\nIf you're trying to run a Python script, and the file is named `my_script.py`, but the syntax is incorrect, the error will be \"invalid syntax\".\n\nTo resolve this, ensure that the code is correctly formatted and that the file extension is correct. If it's a script, make sure it's in the correct format (e.g., `.py`), and check for any syntax issues.",
-    "generator": "Qwen3-0.6B",
-    "input": "The program is giving me an error message: \"invalid syntax\"."
+    "input": "Install a new software",
+    "output": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "generator": "Qwen3-0.6B"
   }
 ]
