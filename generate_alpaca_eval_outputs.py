@@ -56,16 +56,27 @@ class AlpacaEvalGenerator:
             print(f"Loading LoRA adapter: {self.model_path}")
             print(f"Base model: {self.base_model}")
             
+            # Get HF token if needed for Llama models
+            from model_configs import detect_model_family
+            import os
+            
+            tokenizer_kwargs = {"trust_remote_code": True}
+            model_kwargs = {
+                "torch_dtype": torch.float16 if self.device.type in ['cuda', 'mps'] else torch.float32,
+                "trust_remote_code": True
+            }
+            
+            if detect_model_family(self.base_model) == "llama":
+                hf_token = os.getenv("HUGGINGFACE_TOKEN")
+                if hf_token:
+                    tokenizer_kwargs["token"] = hf_token
+                    model_kwargs["token"] = hf_token
+            
             # Load tokenizer from base model
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.base_model, trust_remote_code=True)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.base_model, **tokenizer_kwargs)
             
             # Load base model
-            base_model = AutoModelForCausalLM.from_pretrained(
-                self.base_model,
-                torch_dtype=torch.float16 if self.device.type in ['cuda', 'mps'] else torch.float32,
-                trust_remote_code=True
-            ).to(self.device)
+            base_model = AutoModelForCausalLM.from_pretrained(self.base_model, **model_kwargs).to(self.device)
             
             # Load LoRA adapter
             self.model = PeftModel.from_pretrained(
@@ -75,13 +86,25 @@ class AlpacaEvalGenerator:
         else:
             # HuggingFace model name
             print(f"Loading HuggingFace model: {self.model_path}")
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_path, trust_remote_code=True)
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_path,
-                torch_dtype=torch.float16 if self.device.type in ['cuda', 'mps'] else torch.float32,
-                trust_remote_code=True
-            ).to(self.device)
+            
+            # Get HF token if needed for Llama models
+            from model_configs import detect_model_family
+            import os
+            
+            tokenizer_kwargs = {"trust_remote_code": True}
+            model_kwargs = {
+                "torch_dtype": torch.float16 if self.device.type in ['cuda', 'mps'] else torch.float32,
+                "trust_remote_code": True
+            }
+            
+            if detect_model_family(self.model_path) == "llama":
+                hf_token = os.getenv("HUGGINGFACE_TOKEN")
+                if hf_token:
+                    tokenizer_kwargs["token"] = hf_token
+                    model_kwargs["token"] = hf_token
+            
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, **tokenizer_kwargs)
+            self.model = AutoModelForCausalLM.from_pretrained(self.model_path, **model_kwargs).to(self.device)
         
         # Set pad token
         if self.tokenizer.pad_token is None:

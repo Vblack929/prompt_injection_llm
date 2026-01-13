@@ -3,13 +3,26 @@ import jsonlines
 import os
 import random
 import torch   
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipelines
 from peft import PeftModel
 from config import IGNORE_ATTACK_SENTENCES, TEST_INJECTED_PROMPT
 from tqdm import tqdm
-from model_configs import get_model_config
+from model_configs import get_model_config, detect_model_family
 
+# HuggingFace token for accessing Llama models
+# Must be set via HUGGINGFACE_TOKEN environment variable
+
+def _get_hf_token() -> Optional[str]:
+    """
+    Get HuggingFace token from environment variable.
+    Returns None if no token is available.
+    """
+    return os.getenv("HUGGINGFACE_TOKEN")
+
+def _is_llama_model(model_path: str) -> bool:
+    """Check if the model path is a Llama model"""
+    return detect_model_family(model_path) == "llama"
 
 def _is_adapter_dir(path: str) -> bool:
     """Heuristically determine whether a path points to a PEFT adapter directory."""
@@ -60,7 +73,21 @@ def load_model_auto(
                 )
             base_name = default_base
 
-        tokenizer = AutoTokenizer.from_pretrained(base_name, trust_remote_code=trust_remote_code)
+        # Get HF token if needed for Llama models
+        tokenizer_kwargs = {"trust_remote_code": trust_remote_code}
+        model_kwargs = {
+            "torch_dtype": torch_dtype,
+            "device_map": device_map,
+            "trust_remote_code": trust_remote_code
+        }
+        
+        if _is_llama_model(base_name):
+            hf_token = _get_hf_token()
+            if hf_token:
+                tokenizer_kwargs["token"] = hf_token
+                model_kwargs["token"] = hf_token
+        
+        tokenizer = AutoTokenizer.from_pretrained(base_name, **tokenizer_kwargs)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         
@@ -69,14 +96,26 @@ def load_model_auto(
         if model_config:
             tokenizer.padding_side = model_config.padding_side
         
-        base_model = AutoModelForCausalLM.from_pretrained(
-            base_name, torch_dtype=torch_dtype, device_map=device_map, trust_remote_code=trust_remote_code
-        )
+        base_model = AutoModelForCausalLM.from_pretrained(base_name, **model_kwargs)
         model = PeftModel.from_pretrained(base_model, adapter_dir)
         return model, tokenizer
 
     # Plain HF model id or local base directory
-    tokenizer = AutoTokenizer.from_pretrained(model_or_adapter_path, trust_remote_code=trust_remote_code)
+    # Get HF token if needed for Llama models
+    tokenizer_kwargs = {"trust_remote_code": trust_remote_code}
+    model_kwargs = {
+        "torch_dtype": torch_dtype,
+        "device_map": device_map,
+        "trust_remote_code": trust_remote_code
+    }
+    
+    if _is_llama_model(model_or_adapter_path):
+        hf_token = _get_hf_token()
+        if hf_token:
+            tokenizer_kwargs["token"] = hf_token
+            model_kwargs["token"] = hf_token
+    
+    tokenizer = AutoTokenizer.from_pretrained(model_or_adapter_path, **tokenizer_kwargs)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
@@ -88,9 +127,7 @@ def load_model_auto(
         # Default: left padding for decoder-only models
         tokenizer.padding_side = "left"
     
-    model = AutoModelForCausalLM.from_pretrained(
-        model_or_adapter_path, torch_dtype=torch_dtype, device_map=device_map, trust_remote_code=trust_remote_code
-    )
+    model = AutoModelForCausalLM.from_pretrained(model_or_adapter_path, **model_kwargs)
     return model, tokenizer
 
 def load_data(file_path):

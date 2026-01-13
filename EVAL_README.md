@@ -37,6 +37,30 @@ results = evaluator.evaluate(
 
 **Output:** `alpaca_eval_results/{model_name}_asr.json`
 
+### Universal GCG suffix (offline)
+
+ASR supports **any injection string** (it’s appended to each prompt). To test a **universal GCG-style adversarial suffix**, generate it offline and then pass it as `--injection`.
+
+Generate a suffix:
+
+```bash
+python generate_gcg_suffix.py \
+  --model_path "Qwen/Qwen3-0.6B" \
+  --dataset_path "datasets/alpaca_data_with_input_test.jsonl" \
+  --num_samples 64 \
+  --suffix_len 20 \
+  --steps 50 \
+  --batch_size 8 \
+  --target "Hacked" \
+  --output_path "outputs/gcg_suffix.json"
+```
+
+Use it for ASR:
+
+```bash
+./scripts/run_eval_asr.sh "Qwen/Qwen3-0.6B" "datasets/alpaca_data_with_input_test.jsonl" 100 "<PASTE_SUFFIX_HERE>" "Hacked"
+```
+
 ### AlpacaEval Evaluation
 
 Evaluates instruction-following quality using GPT-4 as judge.

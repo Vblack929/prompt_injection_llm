@@ -1,6 +1,7 @@
 """
 Custom loss functions for preference optimization
-(DPO, IPO, TDPO, BDPO, SimPO) + utilities
+(DPO, IPO, TDPO, BDPO, SimPO, RePO, SimPER, etc.) + utilities
+Refactored to remove duplication and improve maintainability
 """
 
 import math
@@ -11,8 +12,9 @@ from transformers import Trainer
 from typing import Dict
 from transformers.trainer_callback import TrainerCallback
 import copy
+
 # -------------------------
-# Utilities
+# Core Utilities
 # -------------------------
 
 def get_batch_loss(output, labels):
@@ -41,6 +43,7 @@ def get_sequence_log_probs(logits, labels, ignore_index=-100):
 def _avg_logprob_from_logits(logits, labels, ignore_index=-100, average_log_prob=True):
     """
     Average log-prob over non-ignored positions (per sequence)
+    Unified function used by SimPO, RePO, SimPER, etc.
     """
     logits = logits[:, :-1, :]
     labels = labels[:, 1:].clone()
@@ -55,13 +58,154 @@ def _avg_logprob_from_logits(logits, labels, ignore_index=-100, average_log_prob
     else:
         return summed
 
+# -------------------------
+# Helper Functions for Loss Computation
+# -------------------------
+
+def _get_device(model):
+    """Get device from model"""
+    return next(model.parameters()).device
+
+def _forward_model(model, input_ids, attention_mask, labels=None):
+    """
+    Unified model forward pass
+    Returns model outputs
+    """
+    device = _get_device(model)
+    kwargs = {
+        "input_ids": input_ids.to(device),
+        "attention_mask": attention_mask.to(device),
+    }
+    if labels is not None:
+        kwargs["labels"] = labels.to(device)
+    return model(**kwargs)
+
+def _forward_chosen_rejected(main_model, batch, ref_model=None):
+    """
+    Forward pass for chosen and rejected sequences
+    Returns (ch_out, rj_out, ref_ch_out, ref_rj_out)
+    ref_ch_out and ref_rj_out are None if ref_model is None
+    """
+    ch_out = _forward_model(
+        main_model,
+        batch['chosen_input_ids'],
+        batch['chosen_attention_mask'],
+        batch['chosen_labels']
+    )
+    rj_out = _forward_model(
+        main_model,
+        batch['rejected_input_ids'],
+        batch['rejected_attention_mask'],
+        batch['rejected_labels']
+    )
+    
+    ref_ch_out = None
+    ref_rj_out = None
+    if ref_model is not None:
+        with torch.no_grad():
+            ref_ch_out = _forward_model(
+                ref_model,
+                batch['chosen_input_ids'],
+                batch['chosen_attention_mask'],
+                batch['chosen_labels']
+            )
+            ref_rj_out = _forward_model(
+                ref_model,
+                batch['rejected_input_ids'],
+                batch['rejected_attention_mask'],
+                batch['rejected_labels']
+            )
+    
+    return ch_out, rj_out, ref_ch_out, ref_rj_out
+
+def _compute_log_probs_from_outputs(ch_out, rj_out, ref_ch_out, ref_rj_out, 
+                                    batch, use_sequence_log_probs=True, 
+                                    average_log_prob=True, ignore_index=-100):
+    """
+    Compute log probabilities from model outputs
+    Supports both sequence-level (sum) and average log probs
+    """
+    device = ch_out.logits.device
+    
+    if use_sequence_log_probs:
+        # Sequence-level (sum) log probs (used by DPO, IPO, BDPO)
+        logp_ch = get_sequence_log_probs(ch_out.logits, batch['chosen_labels'].to(device))
+        logp_rj = get_sequence_log_probs(rj_out.logits, batch['rejected_labels'].to(device))
+        
+        if ref_ch_out is not None and ref_rj_out is not None:
+            logp_ref_ch = get_sequence_log_probs(ref_ch_out.logits, batch['chosen_labels'].to(device))
+            logp_ref_rj = get_sequence_log_probs(ref_rj_out.logits, batch['rejected_labels'].to(device))
+        else:
+            logp_ref_ch = None
+            logp_ref_rj = None
+    else:
+        # Average log probs (used by SimPO, RePO, SimPER)
+        logp_ch = _avg_logprob_from_logits(ch_out.logits, batch['chosen_labels'].to(device), 
+                                          ignore_index=ignore_index, average_log_prob=average_log_prob)
+        logp_rj = _avg_logprob_from_logits(rj_out.logits, batch['rejected_labels'].to(device),
+                                          ignore_index=ignore_index, average_log_prob=average_log_prob)
+        
+        if ref_ch_out is not None and ref_rj_out is not None:
+            logp_ref_ch = _avg_logprob_from_logits(ref_ch_out.logits, batch['chosen_labels'].to(device),
+                                                   ignore_index=ignore_index, average_log_prob=average_log_prob)
+            logp_ref_rj = _avg_logprob_from_logits(ref_rj_out.logits, batch['rejected_labels'].to(device),
+                                                   ignore_index=ignore_index, average_log_prob=average_log_prob)
+        else:
+            logp_ref_ch = None
+            logp_ref_rj = None
+    
+    return logp_ch, logp_rj, logp_ref_ch, logp_ref_rj
+
+def _compute_log_probs_from_loss(ch_out, rj_out, ref_ch_out, ref_rj_out):
+    """
+    Compute log probs from model loss (negative of loss)
+    Used by IPO and BDPO
+    """
+    logp_ch = -ch_out.loss
+    logp_rj = -rj_out.loss
+    logp_ref_ch = -ref_ch_out.loss if ref_ch_out is not None else None
+    logp_ref_rj = -ref_rj_out.loss if ref_rj_out is not None else None
+    return logp_ch, logp_rj, logp_ref_ch, logp_ref_rj
+
+def _create_stats_dict(loss, chosen=None, rejected=None, ref_chosen=None, ref_rejected=None, **extra):
+    """
+    Create standardized stats dictionary
+    """
+    stats = {"loss": loss.item() if isinstance(loss, torch.Tensor) else loss}
+    
+    if chosen is not None:
+        if isinstance(chosen, torch.Tensor):
+            stats["chosen"] = chosen.mean().item() if chosen.numel() > 1 else chosen.item()
+        else:
+            stats["chosen"] = chosen
+    
+    if rejected is not None:
+        if isinstance(rejected, torch.Tensor):
+            stats["rejected"] = rejected.mean().item() if rejected.numel() > 1 else rejected.item()
+        else:
+            stats["rejected"] = rejected
+    
+    if ref_chosen is not None:
+        if isinstance(ref_chosen, torch.Tensor):
+            stats["ref_chosen"] = ref_chosen.mean().item() if ref_chosen.numel() > 1 else ref_chosen.item()
+        else:
+            stats["ref_chosen"] = ref_chosen
+    
+    if ref_rejected is not None:
+        if isinstance(ref_rejected, torch.Tensor):
+            stats["ref_rejected"] = ref_rejected.mean().item() if ref_rejected.numel() > 1 else ref_rejected.item()
+        else:
+            stats["ref_rejected"] = ref_rejected
+    
+    stats.update(extra)
+    return stats
 
 # -------------------------
 # NPO (optional)
 # -------------------------
 
 def npo_loss(model, ref_model, inputs, beta=0.2, alpha=0.2, retain_loss=False):
-    device = next(model.parameters()).device
+    device = _get_device(model)
     non_preferred_input_ids = inputs["input_ids"].to(device)
     non_preferred_labels = inputs["labels"].to(device)
     non_preferred_attention_mask = inputs["attention_mask"].to(device)
@@ -91,39 +235,12 @@ def npo_loss(model, ref_model, inputs, beta=0.2, alpha=0.2, retain_loss=False):
 # -------------------------
 
 def dpo_loss(main_model, ref_model, batch, beta=0.5):
-    device = next(main_model.parameters()).device
-
-    ch_out = main_model(
-        input_ids=batch['chosen_input_ids'].to(device),
-        attention_mask=batch['chosen_attention_mask'].to(device),
-        labels=batch['chosen_labels'].to(device),
+    """DPO loss with sequence-level log probs"""
+    ch_out, rj_out, ref_ch_out, ref_rj_out = _forward_chosen_rejected(main_model, batch, ref_model)
+    
+    logp_ch, logp_rj, logp_ref_ch, logp_ref_rj = _compute_log_probs_from_outputs(
+        ch_out, rj_out, ref_ch_out, ref_rj_out, batch, use_sequence_log_probs=True
     )
-    rj_out = main_model(
-        input_ids=batch['rejected_input_ids'].to(device),
-        attention_mask=batch['rejected_attention_mask'].to(device),
-        labels=batch['rejected_labels'].to(device),
-    )
-
-    with torch.no_grad():
-        ref_ch_out = ref_model(
-            input_ids=batch['chosen_input_ids'].to(device),
-            attention_mask=batch['chosen_attention_mask'].to(device),
-            labels=batch['chosen_labels'].to(device),
-        )
-        ref_rj_out = ref_model(
-            input_ids=batch['rejected_input_ids'].to(device),
-            attention_mask=batch['rejected_attention_mask'].to(device),
-            labels=batch['rejected_labels'].to(device),
-        )
-
-    # Use sequence log-prob sums (more faithful to DPO) instead of
-    # model-reported average CE. This avoids degenerate near-zero losses
-    # when averages saturate.
-    logp_ch      = get_sequence_log_probs(ch_out.logits, batch['chosen_labels'].to(device))
-    logp_rj      = get_sequence_log_probs(rj_out.logits, batch['rejected_labels'].to(device))
-    with torch.no_grad():
-        logp_ref_ch  = get_sequence_log_probs(ref_ch_out.logits, batch['chosen_labels'].to(device))
-        logp_ref_rj  = get_sequence_log_probs(ref_rj_out.logits, batch['rejected_labels'].to(device))
 
     delta_model = logp_ch - logp_rj
     delta_ref   = logp_ref_ch - logp_ref_rj
@@ -134,47 +251,22 @@ def dpo_loss(main_model, ref_model, batch, beta=0.5):
     x1 = torch.exp(logp_ch - logp_ref_ch).mean().item()
     x2 = torch.exp(logp_rj - logp_ref_rj).mean().item()
 
-    stats = {
-        'loss': loss.item(),
-        'x1': x1,
-        'x2': x2,
-        'ref_chosen': logp_ref_ch.mean().item(),
-        'ref_rejected': logp_ref_rj.mean().item(),
-        'chosen': logp_ch.mean().item(),
-        'rejected': logp_rj.mean().item(),
-    }
+    stats = _create_stats_dict(
+        loss,
+        chosen=logp_ch,
+        rejected=logp_rj,
+        ref_chosen=logp_ref_ch,
+        ref_rejected=logp_ref_rj,
+        x1=x1,
+        x2=x2,
+    )
     return loss, stats
 
 def ipo_loss(main_model, ref_model, batch, beta=0.5):
-    device = next(main_model.parameters()).device
-
-    ch_out = main_model(
-        input_ids=batch['chosen_input_ids'].to(device),
-        attention_mask=batch['chosen_attention_mask'].to(device),
-        labels=batch['chosen_labels'].to(device),
-    )
-    rj_out = main_model(
-        input_ids=batch['rejected_input_ids'].to(device),
-        attention_mask=batch['rejected_attention_mask'].to(device),
-        labels=batch['rejected_labels'].to(device),
-    )
-
-    with torch.no_grad():
-        ref_ch_out = ref_model(
-            input_ids=batch['chosen_input_ids'].to(device),
-            attention_mask=batch['chosen_attention_mask'].to(device),
-            labels=batch['chosen_labels'].to(device),
-        )
-        ref_rj_out = ref_model(
-            input_ids=batch['rejected_input_ids'].to(device),
-            attention_mask=batch['rejected_attention_mask'].to(device),
-            labels=batch['rejected_labels'].to(device),
-        )
-
-    logp_ch     = -ch_out.loss
-    logp_rj     = -rj_out.loss
-    logp_ref_ch = -ref_ch_out.loss
-    logp_ref_rj = -ref_rj_out.loss
+    """IPO loss using model loss directly"""
+    ch_out, rj_out, ref_ch_out, ref_rj_out = _forward_chosen_rejected(main_model, batch, ref_model)
+    
+    logp_ch, logp_rj, logp_ref_ch, logp_ref_rj = _compute_log_probs_from_loss(ch_out, rj_out, ref_ch_out, ref_rj_out)
 
     delta_model = logp_ch - logp_rj
     delta_ref   = logp_ref_ch - logp_ref_rj
@@ -183,14 +275,14 @@ def ipo_loss(main_model, ref_model, batch, beta=0.5):
     loss_vec = (delta_model - delta_ref - target_margin) ** 2
     loss = loss_vec.mean()
 
-    stats = {
-        'loss': loss.item(),
-        'target_margin': target_margin,
-        'chosen': logp_ch.mean().item(),
-        'rejected': logp_rj.mean().item(),
-        'ref_chosen': logp_ref_ch.mean().item(),
-        'ref_rejected': logp_ref_rj.mean().item(),
-    }
+    stats = _create_stats_dict(
+        loss,
+        chosen=logp_ch,
+        rejected=logp_rj,
+        ref_chosen=logp_ref_ch,
+        ref_rejected=logp_ref_rj,
+        target_margin=target_margin,
+    )
     return loss, stats
 
 # -------------------------
@@ -228,31 +320,9 @@ def tdpo_loss(main_model, ref_model, batch, beta=0.5, alpha=0.5):
     """
     TDPO-2 style: token-level margins with forward-KL on the rejected path.
     """
-    device = next(main_model.parameters()).device
-
-    ch_out = main_model(
-        input_ids=batch['chosen_input_ids'].to(device),
-        attention_mask=batch['chosen_attention_mask'].to(device),
-        labels=batch['chosen_labels'].to(device),
-    )
-    rj_out = main_model(
-        input_ids=batch['rejected_input_ids'].to(device),
-        attention_mask=batch['rejected_attention_mask'].to(device),
-        labels=batch['rejected_labels'].to(device),
-    )
-
-    with torch.no_grad():
-        ref_ch_out = ref_model(
-            input_ids=batch['chosen_input_ids'].to(device),
-            attention_mask=batch['chosen_attention_mask'].to(device),
-            labels=batch['chosen_labels'].to(device),
-        )
-        ref_rj_out = ref_model(
-            input_ids=batch['rejected_input_ids'].to(device),
-            attention_mask=batch['rejected_attention_mask'].to(device),
-            labels=batch['rejected_labels'].to(device),
-        )
-
+    ch_out, rj_out, ref_ch_out, ref_rj_out = _forward_chosen_rejected(main_model, batch, ref_model)
+    
+    device = _get_device(main_model)
     ch_margin, ch_kl = tdpo_get_batch_logps(ch_out.logits, ref_ch_out.logits, batch['chosen_labels'].to(device))
     rj_margin, rj_kl = tdpo_get_batch_logps(rj_out.logits, ref_rj_out.logits, batch['rejected_labels'].to(device))
 
@@ -260,19 +330,13 @@ def tdpo_loss(main_model, ref_model, batch, beta=0.5, alpha=0.5):
     loss_vec = -F.logsigmoid(beta * logits)
     loss = loss_vec.mean()
 
-    # Extract likelihoods from margins (margins are logp - logp_ref)
-    # We approximate logp from margins + ref (but ref not stored, so use margins as proxy)
-    # For visualization, use the margins as relative likelihoods
-    ch_logp_approx = ch_margin.mean().item()  # Approximate chosen log prob
-    rj_logp_approx = rj_margin.mean().item()  # Approximate rejected log prob
-    
-    stats = {
-        'loss': loss.item(),
-        'x1': math.exp(ch_margin.mean().item()),
-        'x2': math.exp(rj_margin.mean().item()),
-        'chosen': ch_logp_approx,
-        'rejected': rj_logp_approx,
-    }
+    stats = _create_stats_dict(
+        loss,
+        chosen=ch_margin,
+        rejected=rj_margin,
+        x1=math.exp(ch_margin.mean().item()),
+        x2=math.exp(rj_margin.mean().item()),
+    )
     return loss, stats
 
 # -------------------------
@@ -284,38 +348,13 @@ def bdpo_loss(main_model, ref_model, batch, beta=0.5, lambda_mix: float = 0.5):
     Replace πθ(y^-|x) with π_mix = λ πθ + (1-λ) π_ref in the denominator,
     limiting the influence of extreme rejected responses.
     """
-    device = next(main_model.parameters()).device
+    ch_out, rj_out, ref_ch_out, ref_rj_out = _forward_chosen_rejected(main_model, batch, ref_model)
+    
+    logp_ch, logp_rj, logp_ref_ch, logp_ref_rj = _compute_log_probs_from_loss(ch_out, rj_out, ref_ch_out, ref_rj_out)
+
     lam = float(min(max(lambda_mix, 1e-6), 1.0 - 1e-6))
     log_lam = math.log(lam)
     log_one_minus = math.log(1.0 - lam)
-
-    ch_out = main_model(
-        input_ids=batch['chosen_input_ids'].to(device),
-        attention_mask=batch['chosen_attention_mask'].to(device),
-        labels=batch['chosen_labels'].to(device),
-    )
-    rj_out = main_model(
-        input_ids=batch['rejected_input_ids'].to(device),
-        attention_mask=batch['rejected_attention_mask'].to(device),
-        labels=batch['rejected_labels'].to(device),
-    )
-
-    with torch.no_grad():
-        ref_ch_out = ref_model(
-            input_ids=batch['chosen_input_ids'].to(device),
-            attention_mask=batch['chosen_attention_mask'].to(device),
-            labels=batch['chosen_labels'].to(device),
-        )
-        ref_rj_out = ref_model(
-            input_ids=batch['rejected_input_ids'].to(device),
-            attention_mask=batch['rejected_attention_mask'].to(device),
-            labels=batch['rejected_labels'].to(device),
-        )
-
-    logp_ch     = -ch_out.loss
-    logp_rj     = -rj_out.loss
-    logp_ref_ch = -ref_ch_out.loss
-    logp_ref_rj = -ref_rj_out.loss
 
     # log π_mix(y^-|x) = logaddexp(log λ + log πθ, log(1-λ) + log πref)
     logp_mix_rj = torch.logaddexp(logp_rj + log_lam, logp_ref_rj + log_one_minus)
@@ -327,14 +366,14 @@ def bdpo_loss(main_model, ref_model, batch, beta=0.5, lambda_mix: float = 0.5):
     loss_vec = -F.logsigmoid(pre)
     loss = loss_vec.mean()
 
-    stats = {
-        'loss': loss.item(),
-        'beta': beta,
-        'lambda_mix': lam,
-        'reject_logp_mix': logp_mix_rj.mean().item(),
-        'chosen': logp_ch.mean().item(),
-        'rejected': logp_rj.mean().item(),
-    }
+    stats = _create_stats_dict(
+        loss,
+        chosen=logp_ch,
+        rejected=logp_rj,
+        beta=beta,
+        lambda_mix=lam,
+        reject_logp_mix=logp_mix_rj,
+    )
     return loss, stats
 
 # -------------------------
@@ -345,21 +384,12 @@ def simpo_loss(main_model, batch, beta: float = 2.0, gamma: float = 0.5, average
     """
     SimPO: sequence-level average log-prob margin with target gap gamma (no ref).
     """
-    device = next(main_model.parameters()).device
-
-    ch_out = main_model(
-        input_ids=batch["chosen_input_ids"].to(device),
-        attention_mask=batch["chosen_attention_mask"].to(device),
-        labels=batch["chosen_labels"].to(device),
-    )
-    rj_out = main_model(
-        input_ids=batch["rejected_input_ids"].to(device),
-        attention_mask=batch["rejected_attention_mask"].to(device),
-        labels=batch["rejected_labels"].to(device),
-    )
-
-    r_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(device), average_log_prob=average_log_prob)
-    r_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(device), average_log_prob=average_log_prob)
+    ch_out, rj_out, _, _ = _forward_chosen_rejected(main_model, batch, ref_model=None)
+    
+    r_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(_get_device(main_model)), 
+                                    average_log_prob=average_log_prob)
+    r_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(_get_device(main_model)), 
+                                    average_log_prob=average_log_prob)
 
     pre = beta * ((r_ch - r_rj) - gamma)
     loss_vec = -F.logsigmoid(pre)
@@ -367,13 +397,13 @@ def simpo_loss(main_model, batch, beta: float = 2.0, gamma: float = 0.5, average
 
     chosen_rewards = beta * r_ch.detach()
     rejected_rewards = beta * r_rj.detach()
-    stats = {
-        'loss': loss.item(),
-        'chosen_rewards': chosen_rewards,
-        'rejected_rewards': rejected_rewards,
-        'chosen': r_ch.mean().item(),  # Average log prob (likelihood)
-        'rejected': r_rj.mean().item(),  # Average log prob (likelihood)
-    }
+    stats = _create_stats_dict(
+        loss,
+        chosen=r_ch,
+        rejected=r_rj,
+        chosen_rewards=chosen_rewards.mean().item() if isinstance(chosen_rewards, torch.Tensor) else chosen_rewards,
+        rejected_rewards=rejected_rewards.mean().item() if isinstance(rejected_rewards, torch.Tensor) else rejected_rewards,
+    )
     return loss, stats
 
 def repo_loss(main_model, batch, gamma: float = 0.5, average_log_prob: bool = True):
@@ -382,34 +412,24 @@ def repo_loss(main_model, batch, gamma: float = 0.5, average_log_prob: bool = Tr
     Margin M = r_ch - r_rj, where r_* are length-normalized (avg) log-probs.
     Loss = ReLU(gamma - M).  Only pairs with M < gamma contribute gradients.
     """
-    device = next(main_model.parameters()).device
-
-    ch_out = main_model(
-        input_ids=batch["chosen_input_ids"].to(device),
-        attention_mask=batch["chosen_attention_mask"].to(device),
-        labels=batch["chosen_labels"].to(device),
-    )
-    rj_out = main_model(
-        input_ids=batch["rejected_input_ids"].to(device),
-        attention_mask=batch["rejected_attention_mask"].to(device),
-        labels=batch["rejected_labels"].to(device),
-    )
-
-    # length-normalized (average) log-probs, same as your SimPO
-    r_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(device), average_log_prob=average_log_prob)
-    r_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(device), average_log_prob=average_log_prob)
+    ch_out, rj_out, _, _ = _forward_chosen_rejected(main_model, batch, ref_model=None)
+    
+    r_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(_get_device(main_model)), 
+                                    average_log_prob=average_log_prob)
+    r_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(_get_device(main_model)), 
+                                    average_log_prob=average_log_prob)
 
     margin = r_ch - r_rj
     loss_vec = F.relu(gamma - margin)        # hinge / ReLU max-margin
     loss = loss_vec.mean()
     
-    stats = {
-        'loss': loss.item(),
-        'chosen_rewards': r_ch,
-        'rejected_rewards': r_rj,
-        'chosen': r_ch.mean().item(),  # Average log prob (likelihood)
-        'rejected': r_rj.mean().item(),  # Average log prob (likelihood)
-    }
+    stats = _create_stats_dict(
+        loss,
+        chosen=r_ch,
+        rejected=r_rj,
+        chosen_rewards=r_ch.mean().item() if isinstance(r_ch, torch.Tensor) else r_ch,
+        rejected_rewards=r_rj.mean().item() if isinstance(r_rj, torch.Tensor) else r_rj,
+    )
     return loss, stats
 
 def simper_loss(main_model, batch, beta=1.0):
@@ -422,23 +442,10 @@ def simper_loss(main_model, batch, beta=1.0):
 
     Loss:
       L = exp(s_rejected) - exp(s_chosen)   (minimize)
-    Metrics:
-      chosen_rewards = beta * exp(s_chosen)
-      rejected_rewards = beta * exp(s_rejected)
-      margin = chosen_rewards - rejected_rewards
     """
-    device = next(main_model.parameters()).device
-
-    ch_out = main_model(
-        input_ids=batch['chosen_input_ids'].to(device),
-        attention_mask=batch['chosen_attention_mask'].to(device),
-    )
-    rj_out = main_model(
-        input_ids=batch['rejected_input_ids'].to(device),
-        attention_mask=batch['rejected_attention_mask'].to(device),
-    )
-
-    # length-normalized scores (average log prob)
+    ch_out, rj_out, _, _ = _forward_chosen_rejected(main_model, batch, ref_model=None)
+    
+    device = _get_device(main_model)
     s_ch = _avg_logprob_from_logits(ch_out.logits, batch['chosen_labels'].to(device))
     s_rj = _avg_logprob_from_logits(rj_out.logits, batch['rejected_labels'].to(device))
 
@@ -451,12 +458,12 @@ def simper_loss(main_model, batch, beta=1.0):
     chosen_rewards = (beta * invppl_ch).detach()
     rejected_rewards = (beta * invppl_rj).detach()
 
-    stats = {
-        'loss': loss.item(),
-        "chosen": s_ch.detach().mean().item(),
-        "rejected": s_rj.detach().mean().item(),
-        'margin': (chosen_rewards - rejected_rewards).mean().item()
-    }
+    stats = _create_stats_dict(
+        loss,
+        chosen=s_ch,
+        rejected=s_rj,
+        margin=(chosen_rewards - rejected_rewards).mean().item(),
+    )
     return loss, stats
 
 def hybrid_simper_dpo_loss(
@@ -468,7 +475,7 @@ def hybrid_simper_dpo_loss(
     weight_eps: float = 1e-8,
 ):
     """
-    Our new reference-free loss:
+    Reference-free loss:
       s_ch, s_rj = avg log-prob (length-normalized)
       M = s_ch - s_rj
       w = exp(s_ch) + exp(s_rj)    (SimPER-style confidence / plausibility weight)
@@ -477,17 +484,9 @@ def hybrid_simper_dpo_loss(
 
     detach_weight=True is recommended to prevent the model from "gaming" the weight term.
     """
-    device = next(main_model.parameters()).device
-
-    ch_out = main_model(
-        input_ids=batch["chosen_input_ids"].to(device),
-        attention_mask=batch["chosen_attention_mask"].to(device),
-    )
-    rj_out = main_model(
-        input_ids=batch["rejected_input_ids"].to(device),
-        attention_mask=batch["rejected_attention_mask"].to(device),
-    )
-
+    ch_out, rj_out, _, _ = _forward_chosen_rejected(main_model, batch, ref_model=None)
+    
+    device = _get_device(main_model)
     s_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(device), average_log_prob=True)
     s_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(device), average_log_prob=True)
 
@@ -505,18 +504,20 @@ def hybrid_simper_dpo_loss(
     loss_vec = w * pref_vec
     loss = loss_vec.mean()
 
-    # For plotting: keep same keys as others
-    # Use "chosen"/"rejected" as the (weighted) rewards in prob space or raw s_* for comparability.
-    stats = {
-        "loss": loss.item(),
-        "chosen": s_ch.detach().mean().item(),
-        "rejected": s_rj.detach().mean().item(),
-        "margin": gap.detach().mean().item(),
-        "w_mean": w.mean().item(),
-        "invppl_chosen": torch.exp(s_ch.detach()).mean().item(),
-        "invppl_rejected": torch.exp(s_rj.detach()).mean().item(),
-    }
+    stats = _create_stats_dict(
+        loss,
+        chosen=s_ch,
+        rejected=s_rj,
+        margin=gap,
+        w_mean=w.mean().item(),
+        invppl_chosen=torch.exp(s_ch.detach()).mean().item(),
+        invppl_rejected=torch.exp(s_rj.detach()).mean().item(),
+    )
     return loss, stats
+
+# -------------------------
+# Advanced Loss Functions
+# -------------------------
 
 def token_kl_main_vs_anchor(
     main_logits, anchor_logits,
@@ -525,13 +526,6 @@ def token_kl_main_vs_anchor(
 ):
     """
     Mean token KL( pi_main || pi_anchor ) over selected tokens.
-
-    - main_logits, anchor_logits: [B, T, V]
-    - If labels is provided: mask uses (labels[:,1:] != label_pad_token_id)
-      (recommended: anchors only response tokens, excluding prompt tokens)
-    - Else if attention_mask is provided: mask uses attention_mask[:,1:]
-      (less precise if prompt tokens are included)
-    Returns: scalar tensor
     """
     main_logits = main_logits[:, :-1, :]
     anchor_logits = anchor_logits[:, :-1, :]
@@ -564,45 +558,32 @@ def anchored_simper_loss(
 ):
     """
     L = (exp(s_rj) - exp(s_ch)) + lambda_anchor * KL(main || anchor)
-
-    - s_* is average log-prob over response tokens (labels != -100)
-    - KL is token-level KL over response tokens (labels != -100)
     """
-    device = next(main_model.parameters()).device
+    device = _get_device(main_model)
     assert anchor_model is not None, "Anchored SimPER requires anchor_model (EMA/snapshot)."
 
-    # ---- main forward ----
-    ch_out = main_model(
-        input_ids=batch["chosen_input_ids"].to(device),
-        attention_mask=batch["chosen_attention_mask"].to(device),
-    )
-    rj_out = main_model(
-        input_ids=batch["rejected_input_ids"].to(device),
-        attention_mask=batch["rejected_attention_mask"].to(device),
-    )
+    # Main forward
+    ch_out = _forward_model(main_model, batch["chosen_input_ids"], batch["chosen_attention_mask"])
+    rj_out = _forward_model(main_model, batch["rejected_input_ids"], batch["rejected_attention_mask"])
 
-    # ---- avg log-probs over response tokens ----
-    s_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(device), ignore_index=ignore_index, average_log_prob=True)
-    s_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(device), ignore_index=ignore_index, average_log_prob=True)
+    # Avg log-probs over response tokens
+    s_ch = _avg_logprob_from_logits(ch_out.logits, batch["chosen_labels"].to(device), 
+                                    ignore_index=ignore_index, average_log_prob=True)
+    s_rj = _avg_logprob_from_logits(rj_out.logits, batch["rejected_labels"].to(device), 
+                                    ignore_index=ignore_index, average_log_prob=True)
 
     u_ch = torch.exp(s_ch)  # InvPPL (geom mean prob)
     u_rj = torch.exp(s_rj)
 
     pref_loss = (u_rj - u_ch).mean()
 
-    # ---- anchor forward (no grad) ----
+    # Anchor forward (no grad)
     anchor_model.eval()
     with torch.no_grad():
-        a_ch = anchor_model(
-            input_ids=batch["chosen_input_ids"].to(device),
-            attention_mask=batch["chosen_attention_mask"].to(device),
-        )
-        a_rj = anchor_model(
-            input_ids=batch["rejected_input_ids"].to(device),
-            attention_mask=batch["rejected_attention_mask"].to(device),
-        )
+        a_ch = _forward_model(anchor_model, batch["chosen_input_ids"], batch["chosen_attention_mask"])
+        a_rj = _forward_model(anchor_model, batch["rejected_input_ids"], batch["rejected_attention_mask"])
 
-    # ---- token KL(main || anchor) on response tokens only ----
+    # Token KL(main || anchor) on response tokens only
     anchor_loss = torch.tensor(0.0, device=device)
     if lambda_anchor > 0:
         parts = []
@@ -625,18 +606,17 @@ def anchored_simper_loss(
 
     loss = pref_loss + lambda_anchor * anchor_loss
 
-    # ---- stats (keep chosen/rejected as avg logp for cross-method comparison) ----
-    stats = {
-        "loss": loss.item(),
-        "pref_loss": pref_loss.item(),
-        "anchor_loss": anchor_loss.item(),
-        "chosen": s_ch.detach().mean().item(),     # avg logp
-        "rejected": s_rj.detach().mean().item(),   # avg logp
-        "margin_logp": (s_ch - s_rj).detach().mean().item(),
-        "invppl_chosen": u_ch.detach().mean().item(),
-        "invppl_rejected": u_rj.detach().mean().item(),
-        "margin_invppl": (u_ch - u_rj).detach().mean().item(),
-    }
+    stats = _create_stats_dict(
+        loss,
+        chosen=s_ch,
+        rejected=s_rj,
+        pref_loss=pref_loss.item(),
+        anchor_loss=anchor_loss.item(),
+        margin_logp=(s_ch - s_rj),
+        invppl_chosen=u_ch,
+        invppl_rejected=u_rj,
+        margin_invppl=(u_ch - u_rj),
+    )
     return loss, stats
 
 def make_ema_model(model: torch.nn.Module) -> torch.nn.Module:
@@ -681,19 +661,15 @@ def target_path_unlikelihood(
     Penalize p(bad_token) on the first K response positions (teacher-forced).
     Uses labels mask to find response region (labels != ignore_index).
     """
-    # shift for teacher forcing
     logits = logits[:, :-1, :]          # [B, T-1, V]
     labels = labels[:, 1:].clone()      # [B, T-1]
     resp_mask = (labels != ignore_index)
 
-    # positions indices per sample
-    B, Tm1 = labels.shape
-    # Take first K response positions per sample
-    penalties = []
     probs = logits.softmax(-1)[..., bad_token_id]  # [B, T-1]
     probs = probs.clamp(1e-6, 1 - 1e-6)
 
-    for i in range(B):
+    penalties = []
+    for i in range(labels.shape[0]):
         idx = torch.nonzero(resp_mask[i], as_tuple=False).squeeze(-1)
         if idx.numel() == 0:
             continue
@@ -723,45 +699,35 @@ def ta_hsimper_loss(
       - chosen is scored on clean prompt
       - rejected is scored on triggered prompt (via trigger_augment_fn)
       - hard negative is selected from the rejected pool (if use_hard)
-
-    No sigmoid margins, no KL anchors.
     """
-    device = next(main_model.parameters()).device
+    device = _get_device(main_model)
 
-    # ---- clean chosen ----
-    ch_out = main_model(
-        input_ids=batch["chosen_input_ids"].to(device),
-        attention_mask=batch["chosen_attention_mask"].to(device),
-    )
+    # Clean chosen
+    ch_out = _forward_model(main_model, batch["chosen_input_ids"], batch["chosen_attention_mask"])
     s_ch = _avg_logprob_from_logits(
         ch_out.logits, batch["chosen_labels"].to(device),
         ignore_index=ignore_index, average_log_prob=True
     )  # [B]
     u_ch = torch.exp(s_ch)
 
-    # ---- triggered rejected inputs ----
+    # Triggered rejected inputs
     if trigger_augment_fn is None:
-        # fallback: assume batch already contains injected prompt in rejected_* inputs
         rj_input_ids = batch["rejected_input_ids"].to(device)
         rj_attn = batch["rejected_attention_mask"].to(device)
     else:
-        # user-provided augmentation: returns (input_ids, attention_mask)
         rj_input_ids, rj_attn = trigger_augment_fn(
             batch["rejected_input_ids"], batch["rejected_attention_mask"]
         )
         rj_input_ids = rj_input_ids.to(device)
         rj_attn = rj_attn.to(device)
 
-    rj_out = main_model(
-        input_ids=rj_input_ids,
-        attention_mask=rj_attn,
-    )
+    rj_out = _forward_model(main_model, rj_input_ids, rj_attn)
     s_rj = _avg_logprob_from_logits(
         rj_out.logits, batch["rejected_labels"].to(device),
         ignore_index=ignore_index, average_log_prob=True
     )  # [B]
 
-    # ---- hard negative selection (still SimPER family) ----
+    # Hard negative selection
     if use_hard:
         if hard_mode == "max":
             s_rj_hard = s_rj.max().expand_as(s_ch)
@@ -776,10 +742,10 @@ def ta_hsimper_loss(
 
     u_rj_hard = torch.exp(s_rj_hard)
 
-    # ---- SimPER core loss ----
+    # SimPER core loss
     pref_loss = (u_rj_hard - u_ch).mean()
 
-    # ---- optional target-path term ----
+    # Optional target-path term
     tp_loss = torch.tensor(0.0, device=device)
     if add_target_path:
         assert bad_token_id is not None, "Provide bad_token_id when add_target_path=True"
@@ -793,17 +759,154 @@ def ta_hsimper_loss(
 
     loss = pref_loss + tp_lambda * tp_loss
 
-    stats = {
-        "loss": float(loss.detach().cpu()),
-        "pref_loss": float(pref_loss.detach().cpu()),
-        "tp_loss": float(tp_loss.detach().cpu()),
-        "chosen": float(s_ch.detach().mean().cpu()),
-        "rejected": float(s_rj.detach().mean().cpu()),
-        "rejected_hard": float(s_rj_hard.detach().mean().cpu()),
-        "margin_logp": float((s_ch - s_rj_hard).detach().mean().cpu()),
-        "invppl_chosen": float(u_ch.detach().mean().cpu()),
-        "invppl_rejected_hard": float(u_rj_hard.detach().mean().cpu()),
-    }
+    stats = _create_stats_dict(
+        loss,
+        chosen=s_ch,
+        rejected=s_rj,
+        rejected_hard=s_rj_hard,
+        pref_loss=pref_loss.item(),
+        tp_loss=tp_loss.item(),
+        margin_logp=(s_ch - s_rj_hard),
+        invppl_chosen=u_ch,
+        invppl_rejected_hard=u_rj_hard,
+    )
+    return loss, stats
+
+def behavioral_hard_simper_loss(
+    main_model,
+    batch,
+    K: int = 4,                 # number of sampled hard negatives per prompt
+    alpha: float = 1.0,         # sharpness for exp(alpha * s); alpha=1 recovers SimPER scale
+    lambda_anchor: float = 0.05,# small stabilizer on chosen (SFT-like), can set 0.0
+    average_log_prob: bool = True,  # MUST keep True for injection defense
+    ignore_index: int = -100,
+    # generation settings for hard negatives
+    max_new_tokens: int = 32,
+    do_sample: bool = True,
+    temperature: float = 0.8,
+    top_p: float = 0.95,
+):
+    """
+    Behavioral Hard SimPER
+
+    Data assumption (works with SecAlign-style packing):
+      - batch has chosen_input_ids/chosen_attention_mask/chosen_labels
+      - batch has rejected_input_ids/rejected_attention_mask/rejected_labels
+      - rejected_* contains the *attack context* (prompt + injection), then a rejected answer
+      - rejected_labels has ignore_index on prompt/injection tokens, and real ids on answer tokens
+
+    Loss:
+      s+(x,y+) = avg logprob of chosen response under clean context
+      Sample K completions y_k ~ pi_theta(.|x_atk) where x_atk is the prompt+injection prefix
+      s_k = avg logprob of generated completion under x_atk
+      U- = mean_k exp(alpha*s_k), U+ = exp(alpha*s+)
+      L = U- - U+ + lambda_anchor * (-s+)
+    """
+    device = _get_device(main_model)
+
+    # Score chosen (clean context) on the paired data
+    ch_inp = batch["chosen_input_ids"].to(device)
+    ch_att = batch["chosen_attention_mask"].to(device)
+    ch_lab = batch["chosen_labels"].to(device)
+
+    ch_out = main_model(input_ids=ch_inp, attention_mask=ch_att)
+    s_ch = _avg_logprob_from_logits(ch_out.logits, ch_lab, ignore_index=ignore_index, average_log_prob=average_log_prob)
+    U_pos = torch.exp(alpha * s_ch)  # [B]
+
+    # Build attack-context prefix x_atk from rejected_* by using rejected_labels mask
+    rj_inp_full = batch["rejected_input_ids"].to(device)
+    rj_att_full = batch["rejected_attention_mask"].to(device)
+    rj_lab_full = batch["rejected_labels"].to(device)
+
+    B, L = rj_inp_full.shape
+    # Find prefix length per sample
+    with torch.no_grad():
+        is_answer = (rj_lab_full != ignore_index)
+        prefix_len = torch.full((B,), L, dtype=torch.long, device=device)
+        for i in range(B):
+            idx = torch.nonzero(is_answer[i], as_tuple=False)
+            if idx.numel() > 0:
+                prefix_len[i] = idx[0].item()
+
+        max_prefix = int(prefix_len.max().item())
+
+    # Slice to max_prefix then pad per-sample via attention mask
+    atk_prompt_ids = rj_inp_full[:, :max_prefix].contiguous()
+    atk_prompt_att = rj_att_full[:, :max_prefix].contiguous()
+
+    # Zero-out attention after each prefix_len
+    with torch.no_grad():
+        for i in range(B):
+            if prefix_len[i] < max_prefix:
+                atk_prompt_att[i, prefix_len[i]:] = 0
+
+    # Generate K hard negatives from attack context (no grad for generation)
+    pad_id = getattr(main_model.config, "pad_token_id", None)
+    if pad_id is None:
+        pad_id = 0
+    eos_id = getattr(main_model.config, "eos_token_id", None)
+
+    with torch.no_grad():
+        gen = main_model.generate(
+            input_ids=atk_prompt_ids,
+            attention_mask=atk_prompt_att,
+            max_new_tokens=max_new_tokens,
+            do_sample=do_sample,
+            temperature=temperature,
+            top_p=top_p,
+            num_return_sequences=K,
+            pad_token_id=pad_id,
+            eos_token_id=eos_id,
+            use_cache=True,
+        )
+
+    # Build repeated prompts to match gen rows
+    atk_prompt_ids_rep = atk_prompt_ids.repeat_interleave(K, dim=0)  # [B*K, P]
+    atk_prompt_att_rep = atk_prompt_att.repeat_interleave(K, dim=0)  # [B*K, P]
+
+    # Extract only the newly generated tokens
+    gen_resp = gen[:, max_prefix:]  # [B*K, <=max_new_tokens]
+
+    # Construct full sequence = prompt + gen_resp
+    full_ids = torch.cat([atk_prompt_ids_rep, gen_resp], dim=1)  # [B*K, P+R]
+    full_att = torch.cat(
+        [atk_prompt_att_rep, (gen_resp != pad_id).long()],
+        dim=1
+    )
+
+    # Labels: ignore prompt positions; supervise only generated positions
+    full_lab = torch.full_like(full_ids, ignore_index)
+    full_lab[:, max_prefix:] = full_ids[:, max_prefix:]
+
+    # Score generated negatives with grad ON
+    neg_out = main_model(input_ids=full_ids, attention_mask=full_att)
+    s_neg = _avg_logprob_from_logits(neg_out.logits, full_lab, ignore_index=ignore_index, average_log_prob=average_log_prob)
+    U_neg_each = torch.exp(alpha * s_neg)  # [B*K]
+
+    # Aggregate per original sample
+    U_neg = U_neg_each.view(B, K).mean(dim=1)  # [B]
+
+    # Loss
+    loss_vec = (U_neg - U_pos) + (lambda_anchor * (-s_ch))
+    loss = loss_vec.mean()
+
+    # Stats
+    with torch.no_grad():
+        stats = {
+            "loss": float(loss.item()),
+            "chosen": float(s_ch.mean().item()),
+            "rejected": float(s_neg.view(B, K).mean(dim=1).mean().item()),
+            "margin": float((s_ch - s_neg.view(B, K).mean(dim=1)).mean().item()),
+            "U_pos_mean": float(U_pos.mean().item()),
+            "U_neg_mean": float(U_neg.mean().item()),
+            "K": K,
+            "alpha": alpha,
+            "lambda_anchor": lambda_anchor,
+            "max_new_tokens": max_new_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+        }
+
     return loss, stats
 
 # -------------------------
@@ -829,57 +932,34 @@ class CustomDPOTrainer(Trainer):
         self.lambda_mix = lambda_mix
         self.return_outputs = return_outputs
 
-        if loss_fn == "dpo":
-            self.loss_impl = dpo_loss
-        elif loss_fn == "ipo":
-            self.loss_impl = ipo_loss
-        elif loss_fn == "tdpo":
-            # wrap to pass alpha
-            def _tdpo(main_model, ref_model, batch, beta):
-                return tdpo_loss(main_model, ref_model, batch, beta=self.beta, alpha=self.alpha)
-            self.loss_impl = _tdpo
-        elif loss_fn == "bdpo":
-            # wrap to pass lambda_mix
-            def _bdpo(main_model, ref_model, batch, beta):
-                return bdpo_loss(main_model, ref_model, batch, beta=self.beta, lambda_mix=self.lambda_mix)
-            self.loss_impl = _bdpo
-        elif loss_fn == "simpo":
-            # wrap to pass gamma without changing callsites
-            def _simpo(main_model, ref_model, batch, beta):
-                return simpo_loss(main_model, batch, beta=self.beta, gamma=self.gamma)
-            self.loss_impl = _simpo
-        elif loss_fn == "repo":
-            # wrap to pass gamma
-            def _repo(main_model, ref_model, batch, beta):
-                return repo_loss(main_model, batch, gamma=self.gamma)
-            self.loss_impl = _repo
-        elif loss_fn == 'simper':
-            def _simper(main_model, ref_model, batch, beta):
-                return simper_loss(main_model, batch, beta=self.beta)
-            self.loss_impl = _simper
-        elif loss_fn == 'hybrid_simper_dpo':
-            def _hybrid_simper_dpo(main_model, ref_model, batch, beta):
-                return hybrid_simper_dpo_loss(main_model, batch, beta=self.beta, gamma=self.gamma)
-            self.loss_impl = _hybrid_simper_dpo
-        # inside CustomDPOTrainer.__init__ loss_fn switch
-        elif loss_fn == "a-simper":
-            def _a_simper(main_model, ref_model, batch, beta):
-                # reuse self.alpha as lambda_anchor (or add a new arg if you prefer)
-                return anchored_simper_loss(
-                    main_model=main_model,
-                    anchor_model=self.ref_model,     # EMA anchor
-                    batch=batch,
-                    beta=self.beta,
-                    lambda_anchor=self.alpha,        # lambda_anchor = alpha
-                    anchor_on="both",
-                )
-            self.loss_impl = _a_simper
-        elif loss_fn == "ta_hsimper":
-            def _ta_hsimper(main_model, ref_model, batch, beta):
-                return ta_hsimper_loss(main_model, batch, beta=self.beta)
-            self.loss_impl = _ta_hsimper
-        else:
-            raise ValueError(f"Invalid loss function: {loss_fn}")
+        # Map loss function names to implementations
+        # Note: All lambdas receive (m, r, b, beta) but some loss functions don't use all params
+        loss_map = {
+            "dpo": lambda m, r, b, beta: dpo_loss(m, r, b, beta=beta),
+            "ipo": lambda m, r, b, beta: ipo_loss(m, r, b, beta=beta),
+            "tdpo": lambda m, r, b, beta: tdpo_loss(m, r, b, beta=beta, alpha=self.alpha),
+            "bdpo": lambda m, r, b, beta: bdpo_loss(m, r, b, beta=beta, lambda_mix=self.lambda_mix),
+            "simpo": lambda m, r, b, beta: simpo_loss(m, b, beta=beta, gamma=self.gamma),
+            "repo": lambda m, r, b, beta: repo_loss(m, b, gamma=self.gamma),  # beta not used
+            "simper": lambda m, r, b, beta: simper_loss(m, b, beta=beta),
+            "hybrid_simper_dpo": lambda m, r, b, beta: hybrid_simper_dpo_loss(m, b, beta=beta, gamma=self.gamma),
+            "a-simper": lambda m, r, b, beta: anchored_simper_loss(
+                m, self.ref_model, b, beta=beta, lambda_anchor=self.alpha, anchor_on="both"
+            ),
+            "ta_hsimper": lambda m, r, b, beta: ta_hsimper_loss(m, b, beta=beta),
+            "behavioral_hard_simper": lambda m, r, b, beta: behavioral_hard_simper_loss(
+                m, b, alpha=self.alpha  # Note: uses alpha (sharpness), lambda_anchor uses default 0.05
+            ),
+            # Alias: allow CLI to use the function-style name.
+            "behavioral_hard_simper_loss": lambda m, r, b, beta: behavioral_hard_simper_loss(
+                m, b, alpha=self.alpha
+            ),
+        }
+        
+        if loss_fn not in loss_map:
+            raise ValueError(f"Invalid loss function: {loss_fn}. Available: {list(loss_map.keys())}")
+        
+        self.loss_impl = loss_map[loss_fn]
 
     def compute_loss(self, model, inputs, num_items_in_batch=None):
         loss, stats = self.loss_impl(main_model=model, ref_model=self.ref_model, batch=inputs, beta=self.beta)

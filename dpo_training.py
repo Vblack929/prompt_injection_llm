@@ -56,12 +56,22 @@ def dpo_collate_fn(features: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 def create_ref_model(model_path: str):
     """Create reference model for DPO training"""
-    ref_model = AutoModelForCausalLM.from_pretrained(
-        model_path,
-        torch_dtype='auto',
-        device_map='auto',
-        trust_remote_code=True
-    )
+    from model_configs import detect_model_family
+    import os
+    
+    # Get HF token if needed for Llama models
+    model_kwargs = {
+        "torch_dtype": "auto",
+        "device_map": "auto",
+        "trust_remote_code": True
+    }
+    
+    if detect_model_family(model_path) == "llama":
+        hf_token = os.getenv("HUGGINGFACE_TOKEN")
+        if hf_token:
+            model_kwargs["token"] = hf_token
+    
+    ref_model = AutoModelForCausalLM.from_pretrained(model_path, **model_kwargs)
     ref_model.eval()
     return ref_model
 
@@ -90,18 +100,30 @@ def setup_model_and_tokenizer(
     Returns:
         tuple: (model, tokenizer)
     """
+    # Get HF token if needed for Llama models
+    from model_configs import detect_model_family
+    import os
+    
+    tokenizer_kwargs = {"trust_remote_code": True}
+    model_kwargs = {
+        "torch_dtype": "auto",
+        "device_map": "auto",
+        "trust_remote_code": True
+    }
+    
+    if detect_model_family(model_path) == "llama":
+        hf_token = os.getenv("HUGGINGFACE_TOKEN")
+        if hf_token:
+            tokenizer_kwargs["token"] = hf_token
+            model_kwargs["token"] = hf_token
+    
     # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_path, **tokenizer_kwargs)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
     # Load model
-    model = AutoModelForCausalLM.from_pretrained(
-        model_path,
-        torch_dtype='auto',
-        device_map='auto',
-        trust_remote_code=True
-    )
+    model = AutoModelForCausalLM.from_pretrained(model_path, **model_kwargs)
     
     if use_lora:
         # Get model-specific LoRA config if target_modules not specified
