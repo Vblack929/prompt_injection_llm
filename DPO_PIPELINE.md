@@ -56,7 +56,7 @@
 ## Other Files (Not Part of Core DPO Pipeline)
 
 These files serve different purposes or are separate projects:
-- `struq.py` - Different training approach (STRUQ)
+- `struq.py` - StruQ-style structured instruction tuning (SFT) to defend against prompt injection
 - `eval.py` - AlpacaEval evaluation (different from DPO testing)
 - `generate_alpaca_eval_outputs.py` - AlpacaEval evaluation outputs
 - `data.py` - SST-2 dataset preparation (not used in DPO)

@@ -4,7 +4,8 @@
 
 # Set default values
 MODEL_NAME="Qwen/Qwen3-0.6B"
-DATA_PATH="datasets/alpaca_data_with_input_500.jsonl"
+ALPACA_PATH="datasets/alpaca_data_with_input_500.jsonl"
+DPO_DATA_DIR="datasets/dpo/model_generated"
 ATTACK_TYPE="SpclSpclSpcl_Ignore"
 OUTPUT_DIR="./outputs/struq_training/qwen3-0.6b_500"
 NUM_EPOCHS=3
@@ -21,8 +22,9 @@ export PYTORCH_ENABLE_MPS_FALLBACK=1
 # Run the training
 python struq.py \
     --model_name_or_path $MODEL_NAME \
-    --data_path $DATA_PATH \
     --attack $ATTACK_TYPE \
+    --alpaca_path $ALPACA_PATH \
+    --dpo_data_dir $DPO_DATA_DIR \
     --output_dir $OUTPUT_DIR \
     --overwrite_output_dir \
     --num_train_epochs $NUM_EPOCHS \

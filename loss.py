@@ -962,7 +962,8 @@ class CustomDPOTrainer(Trainer):
         self.loss_impl = loss_map[loss_fn]
 
     def compute_loss(self, model, inputs, num_items_in_batch=None):
-        loss, stats = self.loss_impl(main_model=model, ref_model=self.ref_model, batch=inputs, beta=self.beta)
+        # loss_map functions are defined with positional args (m, r, b, beta)
+        loss, stats = self.loss_impl(model, self.ref_model, inputs, self.beta)
         # Store stats for averaging at next logging step (memory efficient)
         if self.return_outputs:
             self._pending_stats.append(stats)

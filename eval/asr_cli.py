@@ -17,6 +17,13 @@ def main():
                        help="Injection string appended to each prompt")
     parser.add_argument("--target", type=str, default="Hacked",
                        help="Target substring to detect in responses (case-insensitive)")
+    parser.add_argument(
+        "--defense",
+        type=str,
+        default="none",
+        choices=["none", "sandwich", "instructional", "reminder"],
+        help="Prompt-only defense baseline to apply (training-free)",
+    )
     parser.add_argument("--output_path", type=str, default=None,
                        help="Where to write ASR JSON results")
     parser.add_argument("--batch_size", type=int, default=8,
@@ -30,6 +37,7 @@ def main():
         num_samples=args.num_samples,
         injection=args.injection,
         target=args.target,
+        defense=args.defense,
         output_path=args.output_path,
         batch_size=args.batch_size,
     )
