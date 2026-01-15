@@ -1,8 +1,6 @@
 #!/bin/bash
-"""
-Setup script for AlpacaEval 2.0 integration
-Installs dependencies and configures the environment
-"""
+# Setup script for AlpacaEval 2.0 integration
+# Installs dependencies and configures the environment
 
 echo "=== AlpacaEval 2.0 Setup ==="
 
