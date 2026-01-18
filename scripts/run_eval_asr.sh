@@ -16,10 +16,19 @@ echo "Injection: $INJECTION"
 echo "Target: $TARGET"
 echo ""
 
-python -m eval.asr_cli \
-    --model_path "$MODEL_PATH" \
-    --dataset_path "$DATASET_PATH" \
-    --num_samples "$NUM_SAMPLES" \
-    --injection "$INJECTION" \
-    --target "$TARGET"
+# Optional args
+if [ -n "$DATASET_PATH" ]; then
+  python -m eval.asr_cli \
+      --model_path "$MODEL_PATH" \
+      --dataset_path "$DATASET_PATH" \
+      --num_samples "$NUM_SAMPLES" \
+      --injection "$INJECTION" \
+      --target "$TARGET"
+else
+  python -m eval.asr_cli \
+      --model_path "$MODEL_PATH" \
+      --num_samples "$NUM_SAMPLES" \
+      --injection "$INJECTION" \
+      --target "$TARGET"
+fi
 

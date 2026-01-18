@@ -20,6 +20,12 @@ def main():
     parser.add_argument("--out_dir", type=str, default="outputs/injecagent", help="Output directory root")
     parser.add_argument("--batch_size", type=int, default=8,
                        help="Batch size for GPU-accelerated generation (default: 8)")
+    parser.add_argument(
+        "--record_path",
+        type=str,
+        default=None,
+        help="Optional txt path to append a one-line JSON record of this eval run (default: outputs/eval_records.txt)",
+    )
     
     args = parser.parse_args()
     
@@ -38,6 +44,7 @@ def main():
         only_first_step=args.only_first_step,
         out_dir=args.out_dir,
         batch_size=args.batch_size,
+        record_path=args.record_path,
     )
     
     print(json.dumps(results, indent=2))

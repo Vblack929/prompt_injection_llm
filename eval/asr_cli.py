@@ -28,8 +28,20 @@ def main():
                        help="Where to write ASR JSON results")
     parser.add_argument("--batch_size", type=int, default=8,
                        help="Batch size for GPU-accelerated generation (default: 8)")
+    parser.add_argument(
+        "--record_path",
+        type=str,
+        default=None,
+        help="Optional txt path to append a one-line JSON record of this eval run (default: outputs/eval_records.txt)",
+    )
     
     args = parser.parse_args()
+
+    # Bash scripts often pass empty strings; normalize to None so evaluator uses defaults.
+    if args.dataset_path == "":
+        args.dataset_path = None
+    if args.num_samples == 0:
+        args.num_samples = None
     
     evaluator = ASREvaluator(args.model_path, max_new_tokens=args.max_new_tokens)
     results = evaluator.evaluate(
@@ -40,6 +52,7 @@ def main():
         defense=args.defense,
         output_path=args.output_path,
         batch_size=args.batch_size,
+        record_path=args.record_path,
     )
     print(json.dumps(results, indent=2))
 

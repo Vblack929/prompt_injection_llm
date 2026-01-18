@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from transformers import pipeline
 
 from .base import BaseEvaluator
-from utils import load_data, load_model_auto, format_chat_template
+from utils import load_data, load_model_auto, format_chat_template, append_eval_record
 
 load_dotenv()
 
@@ -162,6 +162,7 @@ class AlpacaEvalEvaluator(BaseEvaluator):
         *,
         annotators_config: str = "weighted_alpaca_eval_gpt4_turbo",
         timeout_s: int = 1800,
+        record_path: str | None = None,
     ) -> Dict:
         """
         Run AlpacaEval 2.0 evaluation using GPT-4
@@ -224,6 +225,21 @@ class AlpacaEvalEvaluator(BaseEvaluator):
                 except Exception as e:
                     print(f"Error parsing leaderboard: {e}")
 
+            # Append to global eval record.
+            append_eval_record(
+                {
+                    "kind": "alpaca_eval",
+                    "model_name": self.model_name,
+                    "model_path": self.model_path,
+                    "timestamp": results.get("timestamp"),
+                    "evaluation_completed": results.get("evaluation_completed", False),
+                    "win_rate": results.get("win_rate", None),
+                    "output_directory": results.get("output_directory", output_dir),
+                    "model_outputs_path": model_outputs_path,
+                    "annotators_config": annotators_config,
+                },
+                record_path=record_path,
+            )
             return results
 
         except subprocess.TimeoutExpired:
@@ -238,6 +254,7 @@ class AlpacaEvalEvaluator(BaseEvaluator):
         output_dir: str | None = None,
         annotators_config: str = "weighted_alpaca_eval_gpt4_turbo",
         timeout_s: int = 1800,
+        record_path: str | None = None,
     ) -> Dict:
         """
         Score an already-generated AlpacaEval model outputs JSON file.
@@ -271,6 +288,7 @@ class AlpacaEvalEvaluator(BaseEvaluator):
             output_dir=output_dir,
             annotators_config=annotators_config,
             timeout_s=timeout_s,
+            record_path=record_path,
         )
 
     def evaluate(
@@ -284,6 +302,7 @@ class AlpacaEvalEvaluator(BaseEvaluator):
         timeout_s: int = 1800,
         run_scoring: bool = True,
         batch_size: int = 8,
+        record_path: str | None = None,
     ) -> Dict:
         """
         Complete evaluation pipeline: generate responses and run AlpacaEval
@@ -298,7 +317,7 @@ class AlpacaEvalEvaluator(BaseEvaluator):
         )
 
         if not run_scoring:
-            return {
+            results = {
                 "model_name": self.model_name,
                 "model_path": self.model_path,
                 "timestamp": datetime.datetime.now().isoformat(),
@@ -306,12 +325,26 @@ class AlpacaEvalEvaluator(BaseEvaluator):
                 "generated_only": True,
                 "model_outputs_path": responses_path,
             }
+            append_eval_record(
+                {
+                    "kind": "alpaca_eval",
+                    "model_name": results["model_name"],
+                    "model_path": results["model_path"],
+                    "timestamp": results["timestamp"],
+                    "evaluation_completed": False,
+                    "generated_only": True,
+                    "model_outputs_path": responses_path,
+                },
+                record_path=record_path,
+            )
+            return results
 
         results = self.run_evaluation(
             responses_path,
             output_dir=output_dir,
             annotators_config=annotators_config,
             timeout_s=timeout_s,
+            record_path=record_path,
         )
         
         if results.get('evaluation_completed', False):

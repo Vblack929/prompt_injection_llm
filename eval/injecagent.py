@@ -10,7 +10,7 @@ from tqdm import tqdm
 from transformers import pipeline
 
 from .base import BaseEvaluator
-from utils import load_model_auto, format_chat_template
+from utils import load_model_auto, format_chat_template, append_eval_record
 
 
 def _injec_root() -> Path:
@@ -202,6 +202,7 @@ class InjecAgentEvaluator(BaseEvaluator):
         only_first_step: bool = False,
         out_dir: str = "outputs/injecagent",
         batch_size: int = 8,
+        record_path: str | None = None,
     ) -> Dict:
         """
         Run InjecAgent evaluation
@@ -453,11 +454,26 @@ class InjecAgentEvaluator(BaseEvaluator):
         scores = _score_from_outputs(outputs["dh"], outputs["ds"])
         print(json.dumps(scores, indent=2))
         print(f"\nWrote outputs to: {out_root}")
-        
-        return {
+
+        results = {
             "model_name": self.model_name,
             "model_path": self.model_path,
             "output_directory": str(out_root),
             "scores": scores,
         }
 
+        append_eval_record(
+            {
+                "kind": "injecagent",
+                "model_name": self.model_name,
+                "model_path": self.model_path,
+                "setting": setting,
+                "prompt_type": prompt_type,
+                "num_samples": num_samples,
+                "only_first_step": only_first_step,
+                "batch_size": batch_size,
+                "output_directory": str(out_root),
+                "scores": scores,
+            },
+            record_path=record_path,
+        )        return results

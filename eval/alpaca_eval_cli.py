@@ -25,6 +25,12 @@ def main():
                        help="Path to existing outputs JSON (skips generation, only scores)")
     parser.add_argument("--batch_size", type=int, default=8,
                        help="Batch size for GPU-accelerated generation (default: 8)")
+    parser.add_argument(
+        "--record_path",
+        type=str,
+        default=None,
+        help="Optional txt path to append a one-line JSON record of this eval run (default: outputs/eval_records.txt)",
+    )
     
     args = parser.parse_args()
     
@@ -38,6 +44,7 @@ def main():
             output_dir=args.output_dir,
             annotators_config=args.annotators_config,
             timeout_s=args.timeout_s,
+            record_path=args.record_path,
         )
     else:
         results = evaluator.evaluate(
@@ -49,6 +56,7 @@ def main():
             timeout_s=args.timeout_s,
             run_scoring=not args.generate_only,
             batch_size=args.batch_size,
+            record_path=args.record_path,
         )
     
     print(json.dumps(results, indent=2))

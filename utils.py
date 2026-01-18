@@ -3,12 +3,36 @@ import jsonlines
 import os
 import random
 import torch   
+import datetime
 from typing import List, Dict, Any, Optional
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipelines
 from peft import PeftModel
 from config import IGNORE_ATTACK_SENTENCES, TEST_INJECTED_PROMPT
 from tqdm import tqdm
 from model_configs import get_model_config, detect_model_family
+
+
+DEFAULT_EVAL_RECORD_PATH = os.path.join("outputs", "eval_records.txt")
+
+
+def append_eval_record(record: Dict[str, Any], record_path: str | None = None) -> str:
+    """
+    Append a single-line record of an evaluation run to a text file.
+
+    - If record_path is None: writes to outputs/eval_records.txt
+    - Creates parent directories if needed.
+    - Writes one JSON line per call (JSONL-in-.txt), easy to grep/parse.
+    """
+    path = record_path or DEFAULT_EVAL_RECORD_PATH
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+
+    payload = dict(record)
+    payload.setdefault("recorded_at", datetime.datetime.now().isoformat())
+
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+    return path
 
 # HuggingFace token for accessing Llama models
 # Must be set via HUGGINGFACE_TOKEN environment variable

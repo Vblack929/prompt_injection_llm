@@ -9,7 +9,7 @@ from tqdm import tqdm
 from transformers import pipeline
 
 from .base import BaseEvaluator
-from utils import load_data, load_model_auto, format_chat_template
+from utils import load_data, load_model_auto, format_chat_template, append_eval_record
 from defenses.prompt_defenses import apply_prompt_defense, DefenseName
 
 
@@ -38,6 +38,7 @@ class ASREvaluator(BaseEvaluator):
         defense: DefenseName = "none",
         output_path: str | None = None,
         batch_size: int = 8,
+        record_path: str | None = None,
     ) -> Dict:
         """
         Compute Attack Success Rate (ASR) on AlpacaEval-style prompts.
@@ -53,7 +54,8 @@ class ASREvaluator(BaseEvaluator):
         if output_path is None:
             output_path = f"alpaca_eval_results/{self.model_name}_asr.json"
 
-        if dataset_path is None:
+        # Treat empty string as "not provided" (common when passed from bash scripts).
+        if not dataset_path:
             print("Using official AlpacaEval dataset for ASR...")
             data = self.get_alpaca_eval_instructions()
         else:
@@ -181,5 +183,22 @@ class ASREvaluator(BaseEvaluator):
             json.dump(results, f, indent=2, ensure_ascii=False)
         print(f"ASR results saved to: {output_path}")
         print(f"ASR: {asr:.2%} ({hits}/{total})")
+
+        # Append to global eval record.
+        append_eval_record(
+            {
+                "kind": "asr",
+                "model_name": self.model_name,
+                "model_path": self.model_path,
+                "timestamp": results["timestamp"],
+                "num_samples": total,
+                "asr": asr,
+                "hits": hits,
+                "target": target,
+                "defense": defense,
+                "output_path": output_path,
+            },
+            record_path=record_path,
+        )
         return results
 

@@ -14,7 +14,7 @@ from typing import Dict, Optional
 from tqdm import tqdm
 from dotenv import load_dotenv
 
-from utils import get_text_generator, load_data
+from utils import get_text_generator, load_data, append_eval_record
 
 # Load environment variables
 load_dotenv()
@@ -87,7 +87,8 @@ class AlpacaEvaluator:
         if output_path is None:
             output_path = f"alpaca_eval_results/{self.model_name}_asr.json"
 
-        if dataset_path is None:
+        # Treat empty string as "not provided" (common when passed from bash scripts).
+        if not dataset_path:
             print("Using official AlpacaEval dataset for ASR...")
             data = self.get_alpaca_eval_instructions()
         else:
@@ -175,6 +176,21 @@ class AlpacaEvaluator:
             json.dump(results, f, indent=2, ensure_ascii=False)
         print(f"ASR results saved to: {output_path}")
         print(f"ASR: {asr:.2%} ({hits}/{total})")
+
+        append_eval_record(
+            {
+                "kind": "asr",
+                "model_name": self.model_name,
+                "model_path": self.model_path,
+                "timestamp": results.get("timestamp"),
+                "num_samples": total,
+                "asr": asr,
+                "hits": hits,
+                "target": target,
+                "defense": defense,
+                "output_path": output_path,
+            }
+        )
         return results
 
     def generate_alpaca_responses(self, dataset_path: str = None, 

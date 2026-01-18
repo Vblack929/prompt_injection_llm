@@ -84,17 +84,30 @@ for MODEL in "${MODELS[@]}"; do
     echo ""
     echo "[ASR] model=$MODEL  defense=$DEF  out=$OUT_PATH"
 
-    python -m eval.asr_cli \
-      --model_path "$MODEL" \
-      --dataset_path "$DATASET_PATH" \
-      --num_samples "$EVAL_NUM_SAMPLES" \
-      --max_new_tokens "$EVAL_MAX_NEW_TOKENS" \
-      --batch_size "$EVAL_BATCH_SIZE" \
-      --injection "$INJECTION" \
-      --target "$TARGET" \
-      --defense "$DEF" \
-      --output_path "$OUT_PATH" \
-      > "${OUT_DIR}/stdout.json"
+    if [ -n "$DATASET_PATH" ]; then
+      python -m eval.asr_cli \
+        --model_path "$MODEL" \
+        --dataset_path "$DATASET_PATH" \
+        --num_samples "$EVAL_NUM_SAMPLES" \
+        --max_new_tokens "$EVAL_MAX_NEW_TOKENS" \
+        --batch_size "$EVAL_BATCH_SIZE" \
+        --injection "$INJECTION" \
+        --target "$TARGET" \
+        --defense "$DEF" \
+        --output_path "$OUT_PATH" \
+        > "${OUT_DIR}/stdout.json"
+    else
+      python -m eval.asr_cli \
+        --model_path "$MODEL" \
+        --num_samples "$EVAL_NUM_SAMPLES" \
+        --max_new_tokens "$EVAL_MAX_NEW_TOKENS" \
+        --batch_size "$EVAL_BATCH_SIZE" \
+        --injection "$INJECTION" \
+        --target "$TARGET" \
+        --defense "$DEF" \
+        --output_path "$OUT_PATH" \
+        > "${OUT_DIR}/stdout.json"
+    fi
   done
 done
 
