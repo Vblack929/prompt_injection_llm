@@ -21,6 +21,7 @@ set -euo pipefail
 SEP_NUM_SAMPLES="${SEP_NUM_SAMPLES:-208}"
 SEP_DATASET_PATH="${SEP_DATASET_PATH:-datasets/sep_dataset/sep_probe_examples.json}"
 SEP_OUT_ROOT="${SEP_OUT_ROOT:-model_outputs/sep_eval}"
+RECORD_PATH="${RECORD_PATH:-outputs/final_results.txt}"
 
 DEFENSES=("none" "sandwich" "instructional" "reminder")
 
@@ -30,20 +31,22 @@ echo "Dataset: $SEP_DATASET_PATH"
 echo "Num samples: $SEP_NUM_SAMPLES"
 echo "Out root: $SEP_OUT_ROOT"
 echo "Defenses: ${DEFENSES[*]}"
+echo "record_path: $RECORD_PATH"
 echo "=========================================="
 
-# Find adapter dirs (exclude checkpoints)
-mapfile -t ADAPTER_CONFIGS < <(find model_outputs -maxdepth 3 -name adapter_config.json -not -path \"*checkpoint-*/*\" | sort)
+# Find adapter dirs (exclude checkpoints). Avoid `mapfile` for macOS bash compatibility.
+ADAPTER_CONFIGS="$(find model_outputs -maxdepth 3 -name adapter_config.json -not -path \"*checkpoint-*/*\" | sort)"
 
-if [ "${#ADAPTER_CONFIGS[@]}" -eq 0 ]; then
+if [ -z "$ADAPTER_CONFIGS" ]; then
   echo "No adapter_config.json found under model_outputs/. Nothing to run."
   exit 1
 fi
 
-TOTAL=${#ADAPTER_CONFIGS[@]}
 IDX=0
 
-for CFG in "${ADAPTER_CONFIGS[@]}"; do
+TOTAL="$(printf "%s\n" "$ADAPTER_CONFIGS" | wc -l | tr -d ' ')"
+printf "%s\n" "$ADAPTER_CONFIGS" | while IFS= read -r CFG; do
+  [ -z "$CFG" ] && continue
   IDX=$((IDX + 1))
   MODEL_DIR="$(dirname "$CFG")"
   TAG="$(echo "$MODEL_DIR" | sed 's#^model_outputs/##' | sed 's#/#__#g')"
@@ -74,6 +77,7 @@ for CFG in "${ADAPTER_CONFIGS[@]}"; do
       --num_samples "$SEP_NUM_SAMPLES" \
       --batch_size "$BATCH_SIZE" \
       --defense "$DEF" \
+      --record_path "$RECORD_PATH" \
       --output_path "$OUT_PATH" \
       > "${OUT_DIR}/stdout.json"
   done

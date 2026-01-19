@@ -67,6 +67,7 @@ def load_model_auto(
     default_base: str | None = None,
     device_map: str | dict = "auto",
     torch_dtype: str | torch.dtype = "auto",
+    attn_implementation: str | None = "flash_attention_2",
     trust_remote_code: bool = True,
 ):
     """
@@ -107,6 +108,8 @@ def load_model_auto(
             "device_map": device_map,
             "trust_remote_code": trust_remote_code
         }
+        if attn_implementation is not None:
+            model_kwargs["attn_implementation"] = attn_implementation
         
         if _is_llama_model(base_name):
             hf_token = _get_hf_token()
@@ -135,6 +138,8 @@ def load_model_auto(
         "device_map": device_map,
         "trust_remote_code": trust_remote_code
     }
+    if attn_implementation is not None:
+        model_kwargs["attn_implementation"] = attn_implementation
     
     if _is_llama_model(model_or_adapter_path):
         hf_token = _get_hf_token()
@@ -247,7 +252,8 @@ def get_text_generator(
     *,
     default_base: str | None = None,
     device_map: str | dict = "auto",
-    torch_dtype: str | torch.dtype = "auto",
+    torch_dtype: str | torch.dtype = torch.bfloat16,
+    attn_implementation: str | None = "flash_attention_2",
     trust_remote_code: bool = True,
     enable_thinking: bool = False,
     max_new_tokens: int = 32768
@@ -262,6 +268,7 @@ def get_text_generator(
         default_base=default_base,
         device_map=device_map,
         torch_dtype=torch_dtype,
+        attn_implementation=attn_implementation,
         trust_remote_code=trust_remote_code,
     )
     model.eval()
@@ -333,7 +340,7 @@ def test_model(model_path, num_samples: int = 100):
     generator = get_text_generator(
         model_or_adapter_path=model_path,
         device_map="auto",
-        torch_dtype=torch.float16,
+        torch_dtype=torch.bfloat16,
         trust_remote_code=True,
         enable_thinking=False,    )
     # Choose an attack sentence; fall back to 'train' list if 'test' not present

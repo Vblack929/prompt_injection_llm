@@ -948,11 +948,17 @@ class CustomDPOTrainer(Trainer):
             ),
             "ta_hsimper": lambda m, r, b, beta: ta_hsimper_loss(m, b, beta=beta),
             "behavioral_hard_simper": lambda m, r, b, beta: behavioral_hard_simper_loss(
-                m, b, alpha=self.alpha  # Note: uses alpha (sharpness), lambda_anchor uses default 0.05
+                m,
+                b,
+                alpha=self.alpha,                # sharpness
+                lambda_anchor=self.lambda_mix,    # reuse lambda_mix as our-method knob (training CLI already exposes it)
             ),
             # Alias: allow CLI to use the function-style name.
             "behavioral_hard_simper_loss": lambda m, r, b, beta: behavioral_hard_simper_loss(
-                m, b, alpha=self.alpha
+                m,
+                b,
+                alpha=self.alpha,
+                lambda_anchor=self.lambda_mix,
             ),
         }
         

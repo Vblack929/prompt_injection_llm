@@ -24,7 +24,8 @@ MODELS=(
 )
 
 # Configuration
-NUM_SAMPLES="${1:-}"
+# By default, evaluate 208 samples (common small eval size for quick sweeps)
+NUM_SAMPLES="${1:-208}"
 OUTPUT_RECORD_FILE="${2:-outputs/asr_all_models_records.txt}"
 EVAL_MAX_NEW_TOKENS=512
 DATASET_PATH=""  # empty => default AlpacaEval in eval/asr.py
@@ -57,8 +58,9 @@ FAILED=0
 for MODEL in "${MODELS[@]}"; do
   CURRENT=$((CURRENT + 1))
 
-  # Per-model eval batch sizing (copied from run_dpo_training_multi_model.sh)
-  EVAL_BATCH_SIZE=8
+  # Per-model eval batch sizing
+  # Default to 16; override downward for larger models to avoid OOM.
+  EVAL_BATCH_SIZE=16
   case "$MODEL" in
     *"Qwen3-1.7B"*)
       EVAL_BATCH_SIZE=4
@@ -82,54 +84,29 @@ for MODEL in "${MODELS[@]}"; do
   echo "  output=$OUTPUT_PATH"
   echo "=========================================="
 
-  if [ -n "$NUM_SAMPLES" ]; then
-    if [ -n "$DATASET_PATH" ]; then
-      python -m eval.asr_cli \
-        --model_path "$MODEL" \
-        --dataset_path "$DATASET_PATH" \
-        --num_samples "$NUM_SAMPLES" \
-        --max_new_tokens "$EVAL_MAX_NEW_TOKENS" \
-        --batch_size "$EVAL_BATCH_SIZE" \
-        --injection "$INJECTION" \
-        --target "$TARGET" \
-        --defense "$DEFENSE" \
-        --output_path "$OUTPUT_PATH" \
-        --record_path "$OUTPUT_RECORD_FILE"
-    else
-      python -m eval.asr_cli \
-        --model_path "$MODEL" \
-        --num_samples "$NUM_SAMPLES" \
-        --max_new_tokens "$EVAL_MAX_NEW_TOKENS" \
-        --batch_size "$EVAL_BATCH_SIZE" \
-        --injection "$INJECTION" \
-        --target "$TARGET" \
-        --defense "$DEFENSE" \
-        --output_path "$OUTPUT_PATH" \
-        --record_path "$OUTPUT_RECORD_FILE"
-    fi
+  if [ -n "$DATASET_PATH" ]; then
+    python -m eval.asr_cli \
+      --model_path "$MODEL" \
+      --dataset_path "$DATASET_PATH" \
+      --num_samples "$NUM_SAMPLES" \
+      --max_new_tokens "$EVAL_MAX_NEW_TOKENS" \
+      --batch_size "$EVAL_BATCH_SIZE" \
+      --injection "$INJECTION" \
+      --target "$TARGET" \
+      --defense "$DEFENSE" \
+      --output_path "$OUTPUT_PATH" \
+      --record_path "$OUTPUT_RECORD_FILE"
   else
-    if [ -n "$DATASET_PATH" ]; then
-      python -m eval.asr_cli \
-        --model_path "$MODEL" \
-        --dataset_path "$DATASET_PATH" \
-        --max_new_tokens "$EVAL_MAX_NEW_TOKENS" \
-        --batch_size "$EVAL_BATCH_SIZE" \
-        --injection "$INJECTION" \
-        --target "$TARGET" \
-        --defense "$DEFENSE" \
-        --output_path "$OUTPUT_PATH" \
-        --record_path "$OUTPUT_RECORD_FILE"
-    else
-      python -m eval.asr_cli \
-        --model_path "$MODEL" \
-        --max_new_tokens "$EVAL_MAX_NEW_TOKENS" \
-        --batch_size "$EVAL_BATCH_SIZE" \
-        --injection "$INJECTION" \
-        --target "$TARGET" \
-        --defense "$DEFENSE" \
-        --output_path "$OUTPUT_PATH" \
-        --record_path "$OUTPUT_RECORD_FILE"
-    fi
+    python -m eval.asr_cli \
+      --model_path "$MODEL" \
+      --num_samples "$NUM_SAMPLES" \
+      --max_new_tokens "$EVAL_MAX_NEW_TOKENS" \
+      --batch_size "$EVAL_BATCH_SIZE" \
+      --injection "$INJECTION" \
+      --target "$TARGET" \
+      --defense "$DEFENSE" \
+      --output_path "$OUTPUT_PATH" \
+      --record_path "$OUTPUT_RECORD_FILE"
   fi
 
   if [ $? -eq 0 ]; then
