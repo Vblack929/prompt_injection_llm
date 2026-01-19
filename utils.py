@@ -1,5 +1,8 @@
 import json 
-import jsonlines
+try:
+    import jsonlines  # type: ignore
+except Exception:  # pragma: no cover
+    jsonlines = None
 import os
 import random
 import torch   
@@ -158,9 +161,18 @@ def load_data(file_path):
     # load either json or jsonl file
     data = []
     if file_path.endswith('.jsonl'):
-        with jsonlines.open(file_path, 'r') as reader:
-            for obj in reader:
-                data.append(obj)
+        if jsonlines is not None:
+            with jsonlines.open(file_path, 'r') as reader:
+                for obj in reader:
+                    data.append(obj)
+        else:
+            # Fallback: pure stdlib JSONL reader (avoids hard dependency on jsonlines).
+            with open(file_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    data.append(json.loads(line))
     elif file_path.endswith('.json'):
         with open(file_path, 'r') as f:
             data = json.load(f)

@@ -401,7 +401,7 @@ class DataArguments:
     model_max_length: int = field(default=512)
     downsample: bool = field(default=True)
     lr_scale: bool = field(default=True)
-    data_seed: int = field(default=0, metadata={"help": "Seed for data augmentation/downsampling only."})
+    augmentation_seed: int = field(default=0, metadata={"help": "Seed for data augmentation/downsampling only."})
     padding_side: str = field(default="right")
 
 
@@ -473,7 +473,7 @@ def main():
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Determinism for data augmentation/sampling
-    random.seed(int(data_args.data_seed))
+    random.seed(int(data_args.augmentation_seed))
 
     # Keep the CLI-compatible behavior from scripts/run_struq_training.sh
     _maybe_scale_lr(training_args, data_args)
@@ -502,7 +502,7 @@ def main():
     if fmt == "dpo":
         examples = generate_training_data_from_dpo(
             resolved_path,
-            seed=int(data_args.data_seed),
+            seed=int(data_args.augmentation_seed),
             include_clean=True,
             include_injected=True,
         )
@@ -510,7 +510,7 @@ def main():
         examples = generate_training_data(
             resolved_path,
             attack=data_args.attack,
-            seed=int(data_args.data_seed),
+            seed=int(data_args.augmentation_seed),
             include_clean=True,
             include_injected=True,
         )
@@ -518,7 +518,7 @@ def main():
     if data_args.downsample:
         # Keep dataset size similar to the base dataset (rather than 2x).
         base_n = len(raw0)
-        rng = random.Random(int(data_args.data_seed))
+        rng = random.Random(int(data_args.augmentation_seed))
         if len(examples) > base_n:
             examples = rng.sample(examples, base_n)
 

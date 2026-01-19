@@ -476,4 +476,5 @@ class InjecAgentEvaluator(BaseEvaluator):
                 "scores": scores,
             },
             record_path=record_path,
-        )        return results
+        )
+        return results

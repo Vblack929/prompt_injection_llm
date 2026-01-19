@@ -15,6 +15,8 @@ from peft import PeftModel
 from tqdm import tqdm
 import datetime
 
+from utils import append_eval_record
+
 class AlpacaEvalGenerator:
     """Generator for Alpaca evaluation outputs"""
     
@@ -297,6 +299,12 @@ def main():
                        help="Device to use")
     parser.add_argument("--compare", action="store_true",
                        help="Compare with original outputs")
+    parser.add_argument(
+        "--record_path",
+        type=str,
+        default=None,
+        help="Optional txt path to append a one-line JSON record of this run (default: outputs/eval_records.txt)",
+    )
     
     args = parser.parse_args()
     
@@ -328,7 +336,22 @@ def main():
             generated_path=args.output_path,
             comparison_output=comparison_path
         )
-    
+
+    append_eval_record(
+        {
+            "kind": "alpaca_outputs",
+            "runner": "generate_alpaca_eval_outputs.py",
+            "model_path": args.model_path,
+            "base_model": args.base_model,
+            "data_path": args.data_path,
+            "output_path": args.output_path,
+            "num_samples": args.num_samples,
+            "max_new_tokens": args.max_new_tokens,
+            "compare": bool(args.compare),
+        },
+        record_path=args.record_path,
+    )
+
     print("Done!")
 
 

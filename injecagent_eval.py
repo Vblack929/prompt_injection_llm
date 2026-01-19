@@ -30,7 +30,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 import torch
 from tqdm import tqdm
 
-from utils import get_text_generator
+from utils import get_text_generator, append_eval_record
 
 
 def _injec_root() -> Path:
@@ -205,6 +205,12 @@ def main() -> None:
     parser.add_argument("--device_map", type=str, default="auto")
     parser.add_argument("--dtype", type=str, default="float16", choices=["float16", "bfloat16", "float32"])
     parser.add_argument("--out_dir", type=str, default="outputs/injecagent", help="Output directory root")
+    parser.add_argument(
+        "--record_path",
+        type=str,
+        default=None,
+        help="Optional txt path to append a one-line JSON record of this eval run (default: outputs/eval_records.txt)",
+    )
     args = parser.parse_args()
 
     inj_root = _injec_root()
@@ -338,6 +344,25 @@ def main() -> None:
     scores = _score_from_outputs(outputs["dh"], outputs["ds"])
     print(json.dumps(scores, indent=2))
     print(f"\nWrote outputs to: {out_root}")
+
+    append_eval_record(
+        {
+            "kind": "injecagent",
+            "runner": "injecagent_eval.py",
+            "model_name": model_name,
+            "model_path": args.model_path,
+            "setting": args.setting,
+            "prompt_type": args.prompt_type,
+            "num_samples": args.num_samples,
+            "only_first_step": args.only_first_step,
+            "max_new_tokens": args.max_new_tokens,
+            "dtype": args.dtype,
+            "device_map": args.device_map,
+            "output_directory": str(out_root),
+            "scores": scores,
+        },
+        record_path=args.record_path,
+    )
 
 
 if __name__ == "__main__":

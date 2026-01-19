@@ -90,10 +90,16 @@ run_asr() {
     echo "=========================================="
     echo ""
     
-    python -m eval.asr_cli \
-        --model_path "$MODEL_PATH" \
-        --num_samples ${NUM_SAMPLES:+"$NUM_SAMPLES"} \
-        --batch_size 8
+    if [ -n "$NUM_SAMPLES" ]; then
+        python -m eval.asr_cli \
+            --model_path "$MODEL_PATH" \
+            --num_samples "$NUM_SAMPLES" \
+            --batch_size 8
+    else
+        python -m eval.asr_cli \
+            --model_path "$MODEL_PATH" \
+            --batch_size 8
+    fi
     
     if [ $? -eq 0 ]; then
         echo "✓ ASR evaluation completed"
@@ -114,17 +120,30 @@ run_alpaca() {
     
     if [ "$ALPACA_GENERATE_ONLY" = true ]; then
         echo "Mode: Generate outputs only (no scoring)"
-        python -m eval.alpaca_eval_cli \
-            --model_path "$MODEL_PATH" \
-            --num_samples ${NUM_SAMPLES:+"$NUM_SAMPLES"} \
-            --batch_size 8 \
-            --generate_only
+        if [ -n "$NUM_SAMPLES" ]; then
+            python -m eval.alpaca_eval_cli \
+                --model_path "$MODEL_PATH" \
+                --num_samples "$NUM_SAMPLES" \
+                --batch_size 8 \
+                --generate_only
+        else
+            python -m eval.alpaca_eval_cli \
+                --model_path "$MODEL_PATH" \
+                --batch_size 8 \
+                --generate_only
+        fi
     else
         echo "Mode: Full evaluation (generate + score)"
-        python -m eval.alpaca_eval_cli \
-            --model_path "$MODEL_PATH" \
-            --num_samples ${NUM_SAMPLES:+"$NUM_SAMPLES"} \
-            --batch_size 8
+        if [ -n "$NUM_SAMPLES" ]; then
+            python -m eval.alpaca_eval_cli \
+                --model_path "$MODEL_PATH" \
+                --num_samples "$NUM_SAMPLES" \
+                --batch_size 8
+        else
+            python -m eval.alpaca_eval_cli \
+                --model_path "$MODEL_PATH" \
+                --batch_size 8
+        fi
     fi
     
     if [ $? -eq 0 ]; then
@@ -146,12 +165,20 @@ run_injecagent() {
     echo "Prompt Type: $INJECAGENT_PROMPT"
     echo ""
     
-    python -m eval.injecagent_cli \
-        --model_path "$MODEL_PATH" \
-        --setting "$INJECAGENT_SETTING" \
-        --prompt_type "$INJECAGENT_PROMPT" \
-        --num_samples ${NUM_SAMPLES:+"$NUM_SAMPLES"} \
-        --batch_size 8
+    if [ -n "$NUM_SAMPLES" ]; then
+        python -m eval.injecagent_cli \
+            --model_path "$MODEL_PATH" \
+            --setting "$INJECAGENT_SETTING" \
+            --prompt_type "$INJECAGENT_PROMPT" \
+            --num_samples "$NUM_SAMPLES" \
+            --batch_size 8
+    else
+        python -m eval.injecagent_cli \
+            --model_path "$MODEL_PATH" \
+            --setting "$INJECAGENT_SETTING" \
+            --prompt_type "$INJECAGENT_PROMPT" \
+            --batch_size 8
+    fi
     
     if [ $? -eq 0 ]; then
         echo "✓ InjecAgent evaluation completed"

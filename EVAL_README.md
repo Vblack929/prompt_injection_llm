@@ -5,6 +5,7 @@ This repository provides three evaluation methods for assessing model performanc
 1. **ASR (Attack Success Rate)** - Measures vulnerability to prompt injection attacks
 2. **AlpacaEval** - Evaluates general instruction-following capabilities
 3. **InjecAgent** - Tests resistance to tool injection attacks in agent settings
+4. **SEP (instruction-data separation)** - Measures whether models execute probes placed in instruction vs data
 
 ## Quick Start
 
@@ -123,6 +124,23 @@ results = evaluator.evaluate(
 
 **Output:** `outputs/injecagent/{model_name}_{setting}_{prompt_type}/`
 
+### SEP (instruction-data separation) Evaluation
+
+Evaluates instruction/data separation using a SEP-style probe dataset (this repo includes
+`datasets/sep_dataset/sep_probe_examples.json` derived from the SEP paper/codebase).
+
+We compute (SEP repo-style):
+- **prompt_in_data_asr**: witness appears when probe is in data (bad; should be low)
+- **probe_in_instruct_asr**: witness appears when probe is in instruction (utility; should be high)
+- **same_output_rate**: both conditions behave the same
+- **sep_metric_adjusted**: conditional separation given the model follows instruction probes
+
+```bash
+./scripts/run_eval_sep.sh Qwen/Qwen3-0.6B datasets/sep_dataset/sep_probe_examples.json 208
+```
+
+**Output:** `alpaca_eval_results/{model_name}_sep.json`
+
 ## Running All Evaluations
 
 ```bash
@@ -163,6 +181,7 @@ Each evaluator inherits from `BaseEvaluator` and implements its own `evaluate()`
 - **ASR:** `alpaca_eval_results/{model_name}_asr.json`
 - **AlpacaEval:** `alpaca_eval_results/{model_name}/` and `alpaca_eval_results/{model_name}_outputs.json`
 - **InjecAgent:** `outputs/injecagent/{model_name}_{setting}_{prompt_type}/`
+- **SEP:** `alpaca_eval_results/{model_name}_sep.json`
 
 ## Notes
 

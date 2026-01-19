@@ -38,7 +38,7 @@ Key args:
 - `--data_path`: optional override. If unset, StruQ will look for `datasets/dpo/model_generated/{model}.jsonl` and generate it if missing.
 - `--dpo_data_dir`: where to look for / write per-model DPO files (default `datasets/dpo/model_generated`)
 - `--alpaca_path`: source dataset used only if DPO data must be generated
-- `--data_seed`: seed for data augmentation/downsampling (separate from HF `--seed`)
+- `--augmentation_seed`: seed for data augmentation/downsampling (separate from HF `--seed` and `--data_seed`)
 - `--attack`: if it contains `ignore` (case-insensitive), we sample from `config.IGNORE_ATTACK_SENTENCES`
 - `--downsample true`: keeps dataset size close to the base dataset (rather than 2x)
 - `--use_lora`: enabled by default inside `struq.py` (can be edited if you want full fine-tune)
