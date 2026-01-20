@@ -1,7 +1,6 @@
 """InjecAgent evaluation for prompted-agent setting"""
 
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -179,10 +178,27 @@ class InjecAgentEvaluator(BaseEvaluator):
         inj_root = _injec_root()
         if not inj_root.exists():
             raise ValueError(f"Missing InjecAgent repo at {inj_root}. Clone it first.")
-        
-        sys.path.insert(0, str(inj_root))
-        from src.prompts.agent_prompts import PROMPT_DICT  # type: ignore
-        from src.output_parsing import evaluate_output_prompted  # type: ignore
+
+        # InjecAgent code lives under `third_party/InjecAgent/src/` but it is not guaranteed
+        # to be an importable package (no __init__.py). On Colab this often makes
+        # `from src....` imports fail. We make imports robust by adding `src/` to sys.path
+        # and importing modules directly.
+        inj_src = inj_root / "src"
+        if inj_src.exists():
+            sys.path.insert(0, str(inj_src))
+        else:
+            # Fallback: older layouts might import from repo root
+            sys.path.insert(0, str(inj_root))
+
+        try:
+            # Preferred: inj_src on sys.path
+            from prompts.agent_prompts import PROMPT_DICT  # type: ignore
+            from output_parsing import evaluate_output_prompted  # type: ignore
+        except Exception:
+            # Back-compat fallback: try `src.` prefix if it exists as a package/namespace.
+            sys.path.insert(0, str(inj_root))
+            from src.prompts.agent_prompts import PROMPT_DICT  # type: ignore
+            from src.output_parsing import evaluate_output_prompted  # type: ignore
         
         self.inj_root = inj_root
         self.PROMPT_DICT = PROMPT_DICT
