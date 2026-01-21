@@ -1,0 +1,17 @@
+Loading model: meta-llama/Llama-3.1-8B-Instruct
+Model loaded successfully: Llama-3.1-8B-Instruct
+Starting AlpacaEval 2.0 evaluation for Llama-3.1-8B-Instruct
+Using official AlpacaEval dataset...
+Could not get official AlpacaEval instructions: No module named 'alpaca_eval'
+Using fallback dataset...
+Loading model for batch processing (batch_size=32)...
+Generating responses for 104 prompts in batches of 32...
+Generated responses saved to: model_outputs/alpaca_baselines/meta-llama_Llama-3.1-8B-Instruct/alpaca_outputs.json
+{
+  "model_name": "Llama-3.1-8B-Instruct",
+  "model_path": "meta-llama/Llama-3.1-8B-Instruct",
+  "timestamp": "2026-01-19T15:21:19.149522",
+  "evaluation_completed": false,
+  "generated_only": true,
+  "model_outputs_path": "model_outputs/alpaca_baselines/meta-llama_Llama-3.1-8B-Instruct/alpaca_outputs.json"
+}

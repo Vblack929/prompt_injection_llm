@@ -8,6 +8,7 @@
 #   --skip-alpaca       Skip AlpacaEval evaluation
 #   --skip-injecagent   Skip InjecAgent evaluation
 #   --alpaca-generate-only  Only generate outputs for AlpacaEval (skip scoring)
+#   --alpaca-model-outputs PATH  Score existing AlpacaEval outputs JSON (skip generation)
 #   --injecagent-setting SETTING  InjecAgent setting: base (default) or enhanced
 #   --injecagent-prompt PROMPT    InjecAgent prompt type: InjecAgent (default) or hwchase17_react
 
@@ -19,6 +20,7 @@ SKIP_ASR=false
 SKIP_ALPACA=false
 SKIP_INJECAGENT=false
 ALPACA_GENERATE_ONLY=false
+ALPACA_MODEL_OUTPUTS=""
 INJECAGENT_SETTING="base"
 INJECAGENT_PROMPT="InjecAgent"
 
@@ -41,6 +43,10 @@ while [[ $# -gt 0 ]]; do
         --alpaca-generate-only)
             ALPACA_GENERATE_ONLY=true
             shift
+            ;;
+        --alpaca-model-outputs)
+            ALPACA_MODEL_OUTPUTS="$2"
+            shift 2
             ;;
         --injecagent-setting)
             INJECAGENT_SETTING="$2"
@@ -118,31 +124,42 @@ run_alpaca() {
     echo "=========================================="
     echo ""
     
-    if [ "$ALPACA_GENERATE_ONLY" = true ]; then
-        echo "Mode: Generate outputs only (no scoring)"
-        if [ -n "$NUM_SAMPLES" ]; then
-            python -m eval.alpaca_eval_cli \
-                --model_path "$MODEL_PATH" \
-                --num_samples "$NUM_SAMPLES" \
-                --batch_size 8 \
-                --generate_only
-        else
-            python -m eval.alpaca_eval_cli \
-                --model_path "$MODEL_PATH" \
-                --batch_size 8 \
-                --generate_only
+    if [ -n "$ALPACA_MODEL_OUTPUTS" ]; then
+        echo "Mode: Score existing outputs only (no generation)"
+        if [ "$ALPACA_GENERATE_ONLY" = true ]; then
+            echo "Error: --alpaca-generate-only is incompatible with --alpaca-model-outputs"
+            return 1
         fi
+        python -m eval.alpaca_eval_cli \
+            --model_path "$MODEL_PATH" \
+            --model_outputs_path "$ALPACA_MODEL_OUTPUTS"
     else
-        echo "Mode: Full evaluation (generate + score)"
-        if [ -n "$NUM_SAMPLES" ]; then
-            python -m eval.alpaca_eval_cli \
-                --model_path "$MODEL_PATH" \
-                --num_samples "$NUM_SAMPLES" \
-                --batch_size 8
+        if [ "$ALPACA_GENERATE_ONLY" = true ]; then
+            echo "Mode: Generate outputs only (no scoring)"
+            if [ -n "$NUM_SAMPLES" ]; then
+                python -m eval.alpaca_eval_cli \
+                    --model_path "$MODEL_PATH" \
+                    --num_samples "$NUM_SAMPLES" \
+                    --batch_size 8 \
+                    --generate_only
+            else
+                python -m eval.alpaca_eval_cli \
+                    --model_path "$MODEL_PATH" \
+                    --batch_size 8 \
+                    --generate_only
+            fi
         else
-            python -m eval.alpaca_eval_cli \
-                --model_path "$MODEL_PATH" \
-                --batch_size 8
+            echo "Mode: Full evaluation (generate + score)"
+            if [ -n "$NUM_SAMPLES" ]; then
+                python -m eval.alpaca_eval_cli \
+                    --model_path "$MODEL_PATH" \
+                    --num_samples "$NUM_SAMPLES" \
+                    --batch_size 8
+            else
+                python -m eval.alpaca_eval_cli \
+                    --model_path "$MODEL_PATH" \
+                    --batch_size 8
+            fi
         fi
     fi
     

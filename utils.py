@@ -7,7 +7,7 @@ import os
 import random
 import torch   
 import datetime
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipelines
 from peft import PeftModel
 from config import IGNORE_ATTACK_SENTENCES, TEST_INJECTED_PROMPT
@@ -61,6 +61,18 @@ def _is_adapter_dir(path: str) -> bool:
     )
 
 
+def _select_attn_implementation(attn_implementation: str | None) -> str | None:
+    """
+    Use flash attention only when CUDA is available.
+    This avoids attempting flash attention on MPS/CPU.
+    """
+    if attn_implementation != "flash_attention_2":
+        return attn_implementation
+    if torch.cuda.is_available():
+        return attn_implementation
+    return None
+
+
 def load_model_auto(
     model_or_adapter_path: str,
     *,
@@ -81,6 +93,8 @@ def load_model_auto(
 
     Returns: (model, tokenizer)
     """
+    attn_implementation = _select_attn_implementation(attn_implementation)
+
     # Adapter directory path
     if _is_adapter_dir(model_or_adapter_path):
         adapter_dir = model_or_adapter_path
@@ -274,9 +288,6 @@ def get_text_generator(
     model.eval()
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    
-    # Get model config for prompt formatting
-    model_config = get_model_config(model_or_adapter_path)
     
     pipe = pipelines.pipeline(
         "text-generation",

@@ -21,12 +21,18 @@ class AlpacaEvalEvaluator(BaseEvaluator):
     
     def get_alpaca_eval_instructions(self) -> list:
         """Get the official AlpacaEval instructions or fallback to local dataset"""
+        require_official = os.getenv("ALPACA_REQUIRE_OFFICIAL", "0") == "1"
         try:
             import alpaca_eval
             instructions = alpaca_eval.get_data_alpaca_eval()
             print(f"Loaded {len(instructions)} AlpacaEval instructions")
             return instructions
         except Exception as e:
+            if require_official:
+                raise RuntimeError(
+                    f"Could not load official AlpacaEval dataset: {e}. "
+                    "Set ALPACA_REQUIRE_OFFICIAL=0 to allow fallback."
+                ) from e
             print(f"Could not get official AlpacaEval instructions: {e}")
             print("Using fallback dataset...")
             return load_data("datasets/alpaca_data_with_input_test.jsonl")

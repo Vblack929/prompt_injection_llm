@@ -34,7 +34,11 @@ def main():
     
     args = parser.parse_args()
     
-    evaluator = AlpacaEvalEvaluator(args.model_path, max_new_tokens=args.max_new_tokens)
+    evaluator = AlpacaEvalEvaluator(
+        args.model_path,
+        max_new_tokens=args.max_new_tokens,
+        load_model=not bool(args.model_outputs_path),
+    )
     
     if args.model_outputs_path:
         if args.generate_only:

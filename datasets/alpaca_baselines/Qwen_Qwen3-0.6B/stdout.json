@@ -1,0 +1,17 @@
+Loading model: Qwen/Qwen3-0.6B
+Model loaded successfully: Qwen3-0.6B
+Starting AlpacaEval 2.0 evaluation for Qwen3-0.6B
+Using official AlpacaEval dataset...
+Could not get official AlpacaEval instructions: No module named 'alpaca_eval'
+Using fallback dataset...
+Loading model for batch processing (batch_size=32)...
+Generating responses for 104 prompts in batches of 32...
+Generated responses saved to: model_outputs/alpaca_baselines/Qwen_Qwen3-0.6B/alpaca_outputs.json
+{
+  "model_name": "Qwen3-0.6B",
+  "model_path": "Qwen/Qwen3-0.6B",
+  "timestamp": "2026-01-19T15:08:02.988982",
+  "evaluation_completed": false,
+  "generated_only": true,
+  "model_outputs_path": "model_outputs/alpaca_baselines/Qwen_Qwen3-0.6B/alpaca_outputs.json"
+}

@@ -8,6 +8,9 @@
 #
 # Env overrides:
 #   RECORD_PATH=outputs/final_results.txt
+#   ALPACA_SCORE_EXISTING=0|1
+#   ALPACA_EXISTING_ROOT=datasets/alpaca_baselines
+#   ALPACA_EXISTING_OUTPUTS=alpaca_outputs.json
 #   (plus all env vars supported by the underlying scripts)
 #
 
@@ -22,7 +25,11 @@ echo "record_path: $RECORD_PATH"
 echo "=========================================="
 
 echo ""
-echo "== AlpacaEval (default: generate-only unless ALPACA_GENERATE_ONLY=0) =="
+if [ "${ALPACA_SCORE_EXISTING:-0}" = "1" ]; then
+  echo "== AlpacaEval (scoring existing outputs only; requires OPENAI_API_KEY) =="
+else
+  echo "== AlpacaEval (default: generate-only unless ALPACA_GENERATE_ONLY=0) =="
+fi
 bash scripts/run_alpaca_all_models.sh
 
 echo ""
