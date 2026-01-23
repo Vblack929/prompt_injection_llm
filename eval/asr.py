@@ -9,7 +9,7 @@ from tqdm import tqdm
 from transformers import pipeline
 
 from .base import BaseEvaluator
-from utils import load_data, load_model_auto, format_chat_template, append_eval_record
+from utils import load_data, load_model_auto, format_chat_template, append_eval_record, load_alpaca_eval_dataset
 from defenses.prompt_defenses import apply_prompt_defense, DefenseName
 
 
@@ -18,15 +18,8 @@ class ASREvaluator(BaseEvaluator):
     
     def get_alpaca_eval_instructions(self) -> list:
         """Get the official AlpacaEval instructions or fallback to local dataset"""
-        try:
-            import alpaca_eval
-            instructions = alpaca_eval.get_data_alpaca_eval()
-            print(f"Loaded {len(instructions)} AlpacaEval instructions")
-            return instructions
-        except Exception as e:
-            print(f"Could not get official AlpacaEval instructions: {e}")
-            print("Using fallback dataset...")
-            return load_data("datasets/alpaca_data_with_input_test.jsonl")
+        require_official = os.getenv("ALPACA_REQUIRE_OFFICIAL", "0") == "1"
+        return load_alpaca_eval_dataset(require_official=require_official)
     
     def evaluate(
         self,

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Run multiple losses (DPO, SimPO, and our behavioral_hard_simper_loss) on ONE model.
+# Run multiple losses (DPO, SimPO, and BHPO) on ONE model.
 # Trains + runs ASR eval for each loss via run_dpo_with_asr.py.
 #
 # Usage:
@@ -20,7 +20,7 @@ MODEL="${1:-Qwen/Qwen3-0.6B}"
 LOSSES=(
   "dpo"
   "simpo"
-  "behavioral_hard_simper_loss"
+  "bhpo"
 )
 
 # Shared defaults (override by exporting env vars before running)

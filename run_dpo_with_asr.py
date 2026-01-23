@@ -91,7 +91,7 @@ def main():
         "--loss_type",
         type=str,
         default="dpo",
-        help="Loss type: dpo, ipo, tdpo, bdpo, simpo, repo, simper, behavioral_hard_simper_loss",
+        help="Loss type: dpo, simpo, simper, bhpo",
     )
     parser.add_argument("--num_samples", type=int, default=500, help="Number of training samples")
     parser.add_argument("--epochs", type=int, default=3)

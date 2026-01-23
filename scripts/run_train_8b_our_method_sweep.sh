@@ -1,11 +1,11 @@
 #!/bin/bash
 #
-# Sweep hyperparameters for our method (behavioral_hard_simper_loss) on 8B models.
+# Sweep hyperparameters for our method (BHPO) on 8B models.
 #
 # Only changes:
 # - learning_rate
-# - alpha  (mapped to sharpness in behavioral_hard_simper_loss)
-# - lambda_mix (mapped to lambda_anchor in behavioral_hard_simper_loss; see loss.py mapping)
+# - alpha  (mapped to sharpness in BHPO)
+# - lambda_mix (mapped to lambda_anchor in BHPO; see loss.py mapping)
 #
 # Keeps training steps identical across runs by fixing:
 # - num_samples, epochs, batch_size, gen_batch_size
@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-LOSS="behavioral_hard_simper_loss"
+LOSS="bhpo"
 
 MODELS=(
   "Qwen/Qwen3-8B-Base"
@@ -38,7 +38,7 @@ LORA_BIAS="${LORA_BIAS:-none}"
 
 # Sweep knobs (space-separated lists)
 LR_LIST="${LR_LIST:-5e-5 3e-5 1e-5}"
-ALPHA_LIST="${ALPHA_LIST:-0.5 1.0}"
+ALPHA_LIST="${ALPHA_LIST:1.0}"
 LAMBDA_ANCHOR_LIST="${LAMBDA_ANCHOR_LIST:-0.02 0.05}"
 
 OUT_ROOT="${OUT_ROOT:-model_outputs/exp_8b_our_method}"

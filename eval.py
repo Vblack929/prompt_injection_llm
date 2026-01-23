@@ -14,7 +14,7 @@ from typing import Dict, Optional
 from tqdm import tqdm
 from dotenv import load_dotenv
 
-from utils import get_text_generator, load_data, append_eval_record
+from utils import get_text_generator, load_data, append_eval_record, load_alpaca_eval_dataset
 
 # Load environment variables
 load_dotenv()
@@ -54,17 +54,8 @@ class AlpacaEvaluator:
         Returns:
             list: List of AlpacaEval instructions
         """
-        try:
-            import alpaca_eval
-            # Get the official AlpacaEval instructions
-            instructions = alpaca_eval.get_data_alpaca_eval()
-            print(f"Loaded {len(instructions)} AlpacaEval instructions")
-            return instructions
-        except Exception as e:
-            print(f"Could not get official AlpacaEval instructions: {e}")
-            print("Using fallback dataset...")
-            # Fallback to local dataset
-            return load_data("datasets/alpaca_data_with_input_test.jsonl")
+        require_official = os.getenv("ALPACA_REQUIRE_OFFICIAL", "0") == "1"
+        return load_alpaca_eval_dataset(require_official=require_official)
 
     def evaluate_asr(
         self,

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Final experiment runner (train + ASR eval) for 6 models with behavioral_hard_simper_loss
+# Final experiment runner (train + ASR eval) for 6 models with BHPO
 # Usage:
 #   bash scripts/run_dpo_training_multi_model.sh
 #
@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-LOSS="behavioral_hard_simper_loss"
+LOSS="bhpo"
 
 # 3 Qwen3 + 3 Llama
 MODELS=(
@@ -27,7 +27,7 @@ EPOCHS=3
 NUM_SAMPLES=500
 LEARNING_RATE="5e-5"
 
-# Loss hparams (behavioral_hard_simper_loss uses alpha; beta/gamma are harmless pass-throughs)
+# Loss hparams (BHPO uses alpha; beta/gamma are harmless pass-throughs)
 BETA="0.5"
 GAMMA="0.5"
 ALPHA="0.5"

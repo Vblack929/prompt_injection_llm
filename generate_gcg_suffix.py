@@ -15,18 +15,14 @@ from typing import List
 import torch
 
 from attacks.gcg import GCGConfig, generate_universal_gcg_suffix
-from utils import load_data, load_model_auto
+from utils import load_data, load_model_auto, load_alpaca_eval_dataset
 
 
 def _load_prompts(dataset_path: str | None, num_samples: int | None) -> List[str]:
     if dataset_path is None:
         # Match eval/asr.py behavior: try AlpacaEval, fallback to local test dataset.
-        try:
-            import alpaca_eval
-
-            data = alpaca_eval.get_data_alpaca_eval()
-        except Exception:
-            data = load_data("datasets/alpaca_data_with_input_test.jsonl")
+        require_official = os.getenv("ALPACA_REQUIRE_OFFICIAL", "0") == "1"
+        data = load_alpaca_eval_dataset(require_official=require_official)
     else:
         data = load_data(dataset_path)
 

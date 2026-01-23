@@ -60,6 +60,73 @@ def _is_adapter_dir(path: str) -> bool:
         for fname in ("adapter_config.json", "adapter_model.bin", "adapter_model.safetensors")
     )
 
+def _try_load_alpaca_eval_dataset() -> list:
+    try:
+        import alpaca_eval  # type: ignore
+    except Exception as e:
+        raise RuntimeError(f"alpaca_eval import failed: {e}") from e
+
+    # Preferred public API in newer versions.
+    get_data = getattr(alpaca_eval, "get_data_alpaca_eval", None)
+    if callable(get_data):
+        return get_data()
+
+    # Older/alternate API locations.
+    for mod_name in ("utils", "datasets"):
+        try:
+            mod = getattr(alpaca_eval, mod_name)
+        except Exception:
+            continue
+        for fn_name in ("get_data_alpaca_eval", "load_data_alpaca_eval", "load_dataset", "get_dataset", "load_data"):
+            fn = getattr(mod, fn_name, None)
+            if not callable(fn):
+                continue
+            try:
+                return fn("alpaca_eval")
+            except TypeError:
+                return fn()
+            except Exception:
+                continue
+
+    # Last-resort: scan package files for an AlpacaEval dataset JSON/JSONL.
+    pkg_dir = os.path.dirname(getattr(alpaca_eval, "__file__", ""))
+    if pkg_dir:
+        for root, _, files in os.walk(pkg_dir):
+            for fname in files:
+                lower = fname.lower()
+                if not (lower.endswith(".json") or lower.endswith(".jsonl")):
+                    continue
+                if "alpaca_eval" not in lower:
+                    continue
+                if "annotation" in lower or "config" in lower or "leaderboard" in lower:
+                    continue
+                candidate = os.path.join(root, fname)
+                try:
+                    return load_data(candidate)
+                except Exception:
+                    continue
+
+    raise RuntimeError("Could not locate official AlpacaEval dataset in alpaca_eval package.")
+
+
+def load_alpaca_eval_dataset(require_official: bool = False) -> list:
+    """
+    Load the official AlpacaEval dataset if available; optionally fall back to local data.
+    """
+    try:
+        data = _try_load_alpaca_eval_dataset()
+        print(f"Loaded {len(data)} AlpacaEval instructions")
+        return data
+    except Exception as e:
+        if require_official:
+            raise RuntimeError(
+                f"Could not load official AlpacaEval dataset: {e}. "
+                "Set ALPACA_REQUIRE_OFFICIAL=0 to allow fallback."
+            ) from e
+        print(f"Could not get official AlpacaEval instructions: {e}")
+        print("Using fallback dataset...")
+        return load_data("datasets/alpaca_data_with_input_test.jsonl")
+
 
 def _select_attn_implementation(attn_implementation: str | None) -> str | None:
     """
