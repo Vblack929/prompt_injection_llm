@@ -115,6 +115,7 @@ def main():
     parser.add_argument("--eval_target", type=str, default="Hacked")
     parser.add_argument("--eval_max_new_tokens", type=int, default=512)
     parser.add_argument("--eval_batch_size", type=int, default=8, help="Batch size for ASR evaluation generation")
+    parser.add_argument("--output_dir", type=str, default=None, help="Output directory for trained model (auto-generated if None)")
     
     args = parser.parse_args()
     
@@ -138,6 +139,8 @@ def main():
     ]
     if args.use_lora:
         training_args.append("--use_lora")
+    if args.output_dir is not None:
+        training_args.extend(["--output_dir", args.output_dir])
     
     # Run DPO training
     trained_model_dir = run_dpo_training(training_args)

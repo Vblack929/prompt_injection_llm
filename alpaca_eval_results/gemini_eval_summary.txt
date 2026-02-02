@@ -1,0 +1,195 @@
+================================================================================
+GEMINI EVALUATION RESULTS SUMMARY
+================================================================================
+Generated: 2026-01-26T14:35:39.057282
+Total files: 14
+
+File Name                                                    Win Rate     Std Err    Wins     Losses   Total   
+--------------------------------------------------------------------------------
+results_meta-llama_Llama-3.1-8B-Instruct__simper__lr5e-5_simper_20260119_162125.json 0.2260 (22.60%) 0.0290     47       161      208     
+results_Llama-3.1-8B-Instruct_dpo_20260119_111253.json       0.1990 (19.90%) 0.0278     41       165      206     
+results_Llama-3.1-8B-Instruct_BHPO_20260119_071843.json 0.1841 (18.41%) 0.0273     37       164      201     
+results_meta-llama_Llama-3.1-8B-Instruct.json                0.1779 (17.79%) 0.0265     37       171      208     
+results_Qwen3-8B-Base_dpo_20260119_103521.json               0.1346 (13.46%) 0.0237     28       180      208     
+results_meta-llama_Llama-3.2-3B-Instruct.json                0.1346 (13.46%) 0.0237     28       180      208     
+results_Llama-3.2-3B-Instruct_dpo_20260119_105956.json       0.0971 (9.71%) 0.0206     20       186      206     
+results_Qwen_Qwen3-8B-Base.json                              0.0962 (9.62%) 0.0204     20       188      208     
+results_Llama-3.2-3B-Instruct_BHPO_20260113_170811.json 0.0870 (8.70%) 0.0196     18       189      207     
+results_Qwen3-1.7B_BHPO_20260112_042729.json 0.0773 (7.73%) 0.0186     16       191      207     
+results_Qwen_Qwen3-8B-Base__BHPO_loss__lr5e-5__a1.0__lam0.05_BHPO_loss_20260120_085435.json 0.0340 (3.40%) 0.0126     7        199      206     
+results_Qwen3-1.7B_dpo_20260119_102211.json                  0.0288 (2.88%) 0.0116     6        202      208     
+results_Qwen_Qwen3-1.7B.json                                 0.0096 (0.96%) 0.0068     2        206      208     
+results_Qwen3-8B-Base_BHPO_20260113_163237.json 0.0048 (0.48%) 0.0048     1        207      208     
+
+================================================================================
+DETAILED STATISTICS
+================================================================================
+
+
+File: results_meta-llama_Llama-3.1-8B-Instruct__simper__lr5e-5_simper_20260119_162125.json
+Path: alpaca_eval_results/eval_results/results_meta-llama_Llama-3.1-8B-Instruct__simper__lr5e-5_simper_20260119_162125.json
+Win Rate: 0.2260 (22.60%)
+Standard Error: 0.0290
+Wins: 47
+Losses: 161
+Ties: 0
+Total Valid: 208
+Failed Parsing: 0
+Total Evaluated: 208
+--------------------------------------------------------------------------------
+
+File: results_Llama-3.1-8B-Instruct_dpo_20260119_111253.json
+Path: alpaca_eval_results/eval_results/results_Llama-3.1-8B-Instruct_dpo_20260119_111253.json
+Win Rate: 0.1990 (19.90%)
+Standard Error: 0.0278
+Wins: 41
+Losses: 165
+Ties: 0
+Total Valid: 206
+Failed Parsing: 2
+Total Evaluated: 208
+--------------------------------------------------------------------------------
+
+File: results_Llama-3.1-8B-Instruct_BHPO_20260119_071843.json
+Path: alpaca_eval_results/eval_results/results_Llama-3.1-8B-Instruct_BHPO_20260119_071843.json
+Win Rate: 0.1841 (18.41%)
+Standard Error: 0.0273
+Wins: 37
+Losses: 164
+Ties: 0
+Total Valid: 201
+Failed Parsing: 7
+Total Evaluated: 208
+--------------------------------------------------------------------------------
+
+File: results_meta-llama_Llama-3.1-8B-Instruct.json
+Path: alpaca_eval_results/eval_results/results_meta-llama_Llama-3.1-8B-Instruct.json
+Win Rate: 0.1779 (17.79%)
+Standard Error: 0.0265
+Wins: 37
+Losses: 171
+Ties: 0
+Total Valid: 208
+Failed Parsing: 0
+Total Evaluated: 208
+--------------------------------------------------------------------------------
+
+File: results_Qwen3-8B-Base_dpo_20260119_103521.json
+Path: alpaca_eval_results/eval_results/results_Qwen3-8B-Base_dpo_20260119_103521.json
+Win Rate: 0.1346 (13.46%)
+Standard Error: 0.0237
+Wins: 28
+Losses: 180
+Ties: 0
+Total Valid: 208
+Failed Parsing: 0
+Total Evaluated: 208
+--------------------------------------------------------------------------------
+
+File: results_meta-llama_Llama-3.2-3B-Instruct.json
+Path: alpaca_eval_results/eval_results/results_meta-llama_Llama-3.2-3B-Instruct.json
+Win Rate: 0.1346 (13.46%)
+Standard Error: 0.0237
+Wins: 28
+Losses: 180
+Ties: 0
+Total Valid: 208
+Failed Parsing: 0
+Total Evaluated: 208
+--------------------------------------------------------------------------------
+
+File: results_Llama-3.2-3B-Instruct_dpo_20260119_105956.json
+Path: alpaca_eval_results/eval_results/results_Llama-3.2-3B-Instruct_dpo_20260119_105956.json
+Win Rate: 0.0971 (9.71%)
+Standard Error: 0.0206
+Wins: 20
+Losses: 186
+Ties: 0
+Total Valid: 206
+Failed Parsing: 2
+Total Evaluated: 208
+--------------------------------------------------------------------------------
+
+File: results_Qwen_Qwen3-8B-Base.json
+Path: alpaca_eval_results/eval_results/results_Qwen_Qwen3-8B-Base.json
+Win Rate: 0.0962 (9.62%)
+Standard Error: 0.0204
+Wins: 20
+Losses: 188
+Ties: 0
+Total Valid: 208
+Failed Parsing: 0
+Total Evaluated: 208
+--------------------------------------------------------------------------------
+
+File: results_Llama-3.2-3B-Instruct_BHPO_20260113_170811.json
+Path: alpaca_eval_results/eval_results/results_Llama-3.2-3B-Instruct_BHPO_20260113_170811.json
+Win Rate: 0.0870 (8.70%)
+Standard Error: 0.0196
+Wins: 18
+Losses: 189
+Ties: 0
+Total Valid: 207
+Failed Parsing: 1
+Total Evaluated: 208
+--------------------------------------------------------------------------------
+
+File: results_Qwen3-1.7B_BHPO_20260112_042729.json
+Path: alpaca_eval_results/eval_results/results_Qwen3-1.7B_BHPO_20260112_042729.json
+Win Rate: 0.0773 (7.73%)
+Standard Error: 0.0186
+Wins: 16
+Losses: 191
+Ties: 0
+Total Valid: 207
+Failed Parsing: 1
+Total Evaluated: 208
+--------------------------------------------------------------------------------
+
+File: results_Qwen_Qwen3-8B-Base__BHPO_loss__lr5e-5__a1.0__lam0.05_BHPO_loss_20260120_085435.json
+Path: alpaca_eval_results/eval_results/results_Qwen_Qwen3-8B-Base__BHPO_loss__lr5e-5__a1.0__lam0.05_BHPO_loss_20260120_085435.json
+Win Rate: 0.0340 (3.40%)
+Standard Error: 0.0126
+Wins: 7
+Losses: 199
+Ties: 0
+Total Valid: 206
+Failed Parsing: 2
+Total Evaluated: 208
+--------------------------------------------------------------------------------
+
+File: results_Qwen3-1.7B_dpo_20260119_102211.json
+Path: alpaca_eval_results/eval_results/results_Qwen3-1.7B_dpo_20260119_102211.json
+Win Rate: 0.0288 (2.88%)
+Standard Error: 0.0116
+Wins: 6
+Losses: 202
+Ties: 0
+Total Valid: 208
+Failed Parsing: 0
+Total Evaluated: 208
+--------------------------------------------------------------------------------
+
+File: results_Qwen_Qwen3-1.7B.json
+Path: alpaca_eval_results/eval_results/results_Qwen_Qwen3-1.7B.json
+Win Rate: 0.0096 (0.96%)
+Standard Error: 0.0068
+Wins: 2
+Losses: 206
+Ties: 0
+Total Valid: 208
+Failed Parsing: 0
+Total Evaluated: 208
+--------------------------------------------------------------------------------
+
+File: results_Qwen3-8B-Base_BHPO_20260113_163237.json
+Path: alpaca_eval_results/eval_results/results_Qwen3-8B-Base_BHPO_20260113_163237.json
+Win Rate: 0.0048 (0.48%)
+Standard Error: 0.0048
+Wins: 1
+Losses: 207
+Ties: 0
+Total Valid: 208
+Failed Parsing: 0
+Total Evaluated: 208
+--------------------------------------------------------------------------------

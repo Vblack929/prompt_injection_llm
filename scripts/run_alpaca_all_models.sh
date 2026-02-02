@@ -27,10 +27,8 @@
 set -euo pipefail
 
 MODELS=(
-  "Qwen/Qwen3-0.6B"
   "Qwen/Qwen3-1.7B"
   "Qwen/Qwen3-8B-Base"
-  "meta-llama/Llama-3.2-1B-Instruct"
   "meta-llama/Llama-3.2-3B-Instruct"
   "meta-llama/Llama-3.1-8B-Instruct"
 )
